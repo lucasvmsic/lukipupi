@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Fútbol en la Playa (Modo Pareja) 🏖️⚽💞</title>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+  <style>
+    :root { color-scheme: dark; }
+    html, body {
+      margin:0; padding:0;
+      height:100%;
+      background:#05070c;
+      overflow:hidden;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior: none;
+    }
+    canvas { display:block; }
+
+    .hud{
+      position: fixed;
+      left: 0; right: 0;
+      top: env(safe-area-inset-top, 0);
+      padding: 10px 12px;
+      z-index: 20;
+      pointer-events: none;
+      user-select: none;
+    }
+    .hudInner{
+      width: min(620px, calc(100vw - 24px));
+      margin: 0 auto;
+      display:flex;
+      gap: 10px;
+      align-items: stretch;
+    }
+    .chip{
+      padding: 10px 12px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.14);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 14px 40px rgba(0,0,0,0.30);
+      color:#fff;
+      min-width: 118px;
+      flex: 0 0 auto;
+    }
+    .chip.grow{ flex: 1 1 auto; min-width: 0; }
+    .label{
+      font-size: 10px;
+      letter-spacing: .14em;
+      opacity:.85;
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .value{
+      margin-top:2px;
+      font-size: 18px;
+      font-weight: 950;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .hint{
+      position: fixed;
+      left: 0; right: 0;
+      bottom: calc(env(safe-area-inset-bottom, 0) + 10px);
+      padding: 0 12px;
+      z-index: 20;
+      text-align:center;
+      font-size: 12px;
+      font-weight: 850;
+      color: rgba(255,255,255,0.84);
+      text-shadow: 0 10px 24px rgba(0,0,0,0.42);
+      pointer-events:none;
+      user-select:none;
+    }
+
+    .overlay{
+      position: fixed; inset: 0;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding: 18px;
+      background: rgba(0,0,0,0.62);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      z-index: 999;
+    }
+    .overlay.on{ display:flex; }
+    .modal{
+      width: min(560px, 92vw);
+      border-radius: 24px;
+      padding: 18px 16px 16px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.18);
+      box-shadow: 0 26px 90px rgba(0,0,0,0.55);
+      text-align:center;
+      color:#fff;
+    }
+    .modal h1{
+      margin: 6px 0 10px;
+      font-size: clamp(26px, 5vw, 46px);
+      line-height: 1.05;
+      font-weight: 1000;
+      text-shadow: 0 12px 26px rgba(0,0,0,0.35);
+    }
+    .modal p{ margin:0 0 14px; font-size: 14px; opacity: .9; }
+    .modalBtn{
+      width: min(420px, 90%);
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 0;
+      cursor: pointer;
+      background: #fff;
+      color:#0b1220;
+      font-weight: 1000;
+      font-size: 16px;
+      box-shadow: 0 18px 44px rgba(0,0,0,0.35);
+    }
+    .modalBtn:active{ transform: translateY(1px); }
+  </style>
+</head>
+<body>
+
+  <div class="hud">
+    <div class="hudInner">
+      <div class="chip">
+        <div class="label">Pareja</div>
+        <div class="value" id="uiScoreA">0</div>
+      </div>
+      <div class="chip grow">
+        <div class="label">Objetivo</div>
+        <div class="value" id="uiGoal">Primero en 10 ⚽</div>
+      </div>
+      <div class="chip">
+        <div class="label">Mascotas</div>
+        <div class="value" id="uiScoreB">0</div>
+      </div>
+      <div class="chip">
+        <div class="label">Tiempo</div>
+        <div class="value" id="uiTime">01:30</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hint">Joystick izq: Lucas · Joystick der: Valeria · Botones PATEAR ⚽ (toca una vez para activar sonido)</div>
+
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <h1 id="ovTitle">—</h1>
+      <p id="ovDesc">—</p>
+      <button class="modalBtn" id="ovBtn">REINTENTAR</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const uiScoreA = document.getElementById('uiScoreA');
+  const uiScoreB = document.getElementById('uiScoreB');
+  const uiTime   = document.getElementById('uiTime');
+  const uiGoal   = document.getElementById('uiGoal');
+
+  const overlay = document.getElementById('overlay');
+  const ovTitle = document.getElementById('ovTitle');
+  const ovDesc  = document.getElementById('ovDesc');
+  const ovBtn   = document.getElementById('ovBtn');
+
+  const W = 800, H = 1200;
+
+  // ✅ más cancha (sin romper la base)
+  const FIELD = { x: 70, y: 170, w: 660, h: 900 };
+  const GOAL  = { mouth: 300, depth: 36 };
+
+  // ✅ personajes más chicos (más rango)
+  const CHAR = { size: 78, r: 32, off: 7 };
+
+  const config = {
+    type: Phaser.AUTO,
+    scale: { mode: Phaser.Scale.FIT, parent: document.body, autoCenter: Phaser.Scale.CENTER_BOTH, width: W, height: H },
+    physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
+    scene: { preload, create, update }
+  };
+
+  new Phaser.Game(config);
+
+  let state;
+  let ball, walls;
+  let you, her, dog, cat;
+  let npcs = [];
+
+  // team roles
+  let striker = null, support = null;
+
+  // ====== DOS JOYSTICKS + DOS KICK ======
+  let leftJoy, rightJoy;
+
+  // Playa
+  let waterTile, foamTile;
+  let waveT = 0;
+
+  // ====== AUDIO (mar + silbato) ======
+  // Pon tus archivos aquí:
+  // - assets/futbol/mar.mp3
+  // - assets/futbol/silbato_gol.mp3
+  let oceanSnd = null, whistleSnd = null;
+  let audioUnlocked = false;
+  let waCtx = null, waOcean = null;
+
+  function preload(){
+    this.load.on('loaderror', (file) => {
+      console.warn('No cargó:', file && file.src ? file.src : file);
+    });
+
+    // ✅ JPG
+    this.load.image('yo',    'assets/futbol/yo.jpg');
+    this.load.image('ella',  'assets/futbol/ella.jpg');
+    this.load.image('perro', 'assets/futbol/perro.jpg');
+    this.load.image('gato',  'assets/futbol/gato.jpg');
+
+    // ✅ Audios (si no existen, igual funciona con fallback WebAudio)
+    this.load.audio('ocean',   'assets/futbol/mar.mp3');
+    this.load.audio('whistle', 'assets/futbol/silbato_gol.mp3');
+
+    const g = this.add.graphics();
+
+    // Arena tile
+    g.clear();
+    g.fillStyle(0xEAD9B3, 1);
+    g.fillRect(0,0,96,96);
+    g.fillStyle(0xD7C28E, 1);
+    for(let i=0;i<220;i++){
+      const x = (i*19)%96;
+      const y = (i*37)%96;
+      g.fillCircle(x, y, (i%3)+1);
+    }
+    g.fillStyle(0xCFAF73, 0.55);
+    for(let i=0;i<90;i++){
+      const x = (i*29)%96;
+      const y = (i*17)%96;
+      g.fillRect(x, y, 2, 2);
+    }
+    g.generateTexture('sand', 96, 96);
+
+    // Agua tile
+    g.clear();
+    g.fillStyle(0x0B5A7A, 1);
+    g.fillRect(0,0,256,128);
+    g.fillStyle(0x0E6D91, 0.55);
+    for(let i=0;i<70;i++){
+      const x = (i*31)%256;
+      const y = (i*19)%128;
+      g.fillEllipse(x, y, 42, 10);
+    }
+    g.generateTexture('water', 256, 128);
+
+    // Espuma tile
+    g.clear();
+    g.fillStyle(0xFFFFFF, 0.16);
+    for(let i=0;i<18;i++){
+      const x = 10 + i*14;
+      const y = 18 + ((i%2)*6);
+      g.fillEllipse(x, y, 26, 10);
+    }
+    g.fillStyle(0xFFFFFF, 0.10);
+    for(let i=0;i<18;i++){
+      const x = 18 + i*14;
+      const y = 36 + (((i+1)%2)*6);
+      g.fillEllipse(x, y, 22, 8);
+    }
+    g.generateTexture('foam', 280, 64);
+
+    // Pelota
+    g.clear();
+    g.fillStyle(0xffffff, 1); g.fillCircle(32,32,30);
+    g.lineStyle(6, 0x111827, 1); g.strokeCircle(32,32,30);
+    g.fillStyle(0x111827,1); g.fillCircle(32,32,10);
+    g.generateTexture('ball', 64, 64);
+
+    // Palmerita
+    g.clear();
+    g.fillStyle(0x5B3A1E, 1);
+    g.fillRoundedRect(44, 46, 14, 44, 8);
+    g.fillStyle(0x22C55E, 1);
+    g.fillEllipse(50, 42, 66, 28);
+    g.fillEllipse(44, 34, 56, 22);
+    g.fillEllipse(58, 34, 56, 22);
+    g.generateTexture('palm', 100, 100);
+
+    g.destroy();
+  }
+
+  function create(){
+    this.input.addPointer(3);
+
+    // ✅ 10 goles, 1:30
+    state = { running:true, timeLeft: 90, scoreA:0, scoreB:0, targetScore:10 };
+    uiGoal.textContent = `Primero en ${state.targetScore} ⚽`;
+    syncHUD();
+
+    // Fondo arena
+    this.add.tileSprite(W/2, H/2, W, H, 'sand');
+
+    // Mar (manteniendo base, solo ajustado a nueva cancha)
+    waterTile = this.add.tileSprite(W/2, 70, W, 220, 'water').setAlpha(0.95);
+    foamTile  = this.add.tileSprite(W/2, 180, W, 80, 'foam').setAlpha(0.70);
+
+    // Palmas
+    [
+      {x: 90, y: 115, s: 0.9, a: 0.85},
+      {x: 700, y: 125, s: 0.85, a: 0.85},
+      {x: 130, y: 1090, s: 0.9, a: 0.70},
+      {x: 680, y: 1100, s: 0.85, a: 0.70}
+    ].forEach(p => this.add.image(p.x,p.y,'palm').setScale(p.s).setAlpha(p.a));
+
+    // Viñeta
+    const vignette = this.add.graphics();
+    vignette.fillStyle(0x000000, 0.20);
+    vignette.fillRect(0,0,W,H);
+    vignette.setBlendMode(Phaser.BlendModes.MULTIPLY);
+
+    // Cancha
+    const field = this.add.graphics();
+    field.lineStyle(6, 0xffffff, 0.16);
+    field.strokeRoundedRect(FIELD.x, FIELD.y, FIELD.w, FIELD.h, 26);
+    field.strokeLineShape(new Phaser.Geom.Line(FIELD.x + FIELD.w/2, FIELD.y, FIELD.x + FIELD.w/2, FIELD.y + FIELD.h));
+    field.strokeCircle(FIELD.x + FIELD.w/2, FIELD.y + FIELD.h/2, 88);
+
+    // Arcos visibles
+    drawGoals(this);
+
+    // Paredes con hueco
+    walls = this.physics.add.staticGroup();
+    const top = this.add.rectangle(FIELD.x + FIELD.w/2, FIELD.y, FIELD.w, 18, 0x000000, 0);
+    const bot = this.add.rectangle(FIELD.x + FIELD.w/2, FIELD.y + FIELD.h, FIELD.w, 18, 0x000000, 0);
+    walls.add(top); walls.add(bot);
+
+    const gapY = FIELD.y + (FIELD.h - GOAL.mouth)/2;
+    const gapH = GOAL.mouth;
+
+    const l1 = this.add.rectangle(FIELD.x, FIELD.y + (gapY - FIELD.y)/2, 18, (gapY - FIELD.y), 0x000000, 0);
+    const l2 = this.add.rectangle(FIELD.x, gapY + gapH + (FIELD.y + FIELD.h - (gapY + gapH))/2, 18, (FIELD.y + FIELD.h - (gapY + gapH)), 0x000000, 0);
+    const r1 = this.add.rectangle(FIELD.x + FIELD.w, FIELD.y + (gapY - FIELD.y)/2, 18, (gapY - FIELD.y), 0x000000, 0);
+    const r2 = this.add.rectangle(FIELD.x + FIELD.w, gapY + gapH + (FIELD.y + FIELD.h - (gapY + gapH))/2, 18, (FIELD.y + FIELD.h - (gapY + gapH)), 0x000000, 0);
+
+    walls.add(l1); walls.add(l2); walls.add(r1); walls.add(r2);
+    walls.getChildren().forEach(o => o.body.updateFromGameObject());
+
+    // Zonas de gol
+    const goalZoneL = this.add.zone(FIELD.x - 22, FIELD.y + FIELD.h/2, 70, GOAL.mouth);
+    const goalZoneR = this.add.zone(FIELD.x + FIELD.w + 22, FIELD.y + FIELD.h/2, 70, GOAL.mouth);
+    this.physics.add.existing(goalZoneL, true);
+    this.physics.add.existing(goalZoneR, true);
+
+    // Pelota
+    ball = this.physics.add.image(FIELD.x + FIELD.w/2, FIELD.y + FIELD.h/2, 'ball');
+    ball.setCircle(30);
+    ball.setBounce(0.84);
+    ball.setDamping(true);
+    ball.setDrag(0.70);
+    ball.setMaxVelocity(1080);
+    this.physics.add.collider(ball, walls);
+
+    // Jugadores humanos (equipo A) — ✅ nombres
+    you = makeCharacter(this, FIELD.x + FIELD.w*0.30, FIELD.y + FIELD.h*0.70, 'yo', 'Lucas 💙', 0x93c5fd);
+    her = makeCharacter(this, FIELD.x + FIELD.w*0.30, FIELD.y + FIELD.h*0.30, 'ella', 'Valeria 💗', 0xfda4af);
+
+    // Rivales (equipo B) — ✅ nombres
+    dog = makeCharacter(this, FIELD.x + FIELD.w*0.70, FIELD.y + FIELD.h*0.70, 'perro', 'Coya 🐶', 0xfbbf24);
+    cat = makeCharacter(this, FIELD.x + FIELD.w*0.70, FIELD.y + FIELD.h*0.30, 'gato', 'Emma 🐱', 0xa7f3d0);
+
+    npcs = [dog, cat];
+    for (const n of npcs) n.ai = { kickCd: 0, thinkT: 0, vx: 0, vy: 0, role: 'support' };
+
+    // Colliders
+    [you, her, dog, cat].forEach(p => {
+      this.physics.add.collider(p, walls);
+      this.physics.add.collider(p, ball, () => softBump(p), null, this);
+    });
+
+    this.physics.add.collider(you, her);
+    this.physics.add.collider(you, dog);
+    this.physics.add.collider(you, cat);
+    this.physics.add.collider(her, dog);
+    this.physics.add.collider(her, cat);
+    this.physics.add.collider(dog, cat);
+
+    // Goles
+    this.physics.add.overlap(ball, goalZoneL, () => goal(this, 'B'), null, this);
+    this.physics.add.overlap(ball, goalZoneR, () => goal(this, 'A'), null, this);
+
+    // Timer
+    this.time.addEvent({
+      delay: 1000,
+      loop: true,
+      callback: () => {
+        if (!state.running) return;
+        state.timeLeft = Math.max(0, state.timeLeft - 1);
+        uiTime.textContent = fmtTime(state.timeLeft);
+        if (state.timeLeft <= 0) endMatch();
+      }
+    });
+
+    // Controles pareja
+    leftJoy  = createJoystick(this, { side:'left',  label:'LUCAS',   accent:0x93c5fd });
+    rightJoy = createJoystick(this, { side:'right', label:'VALERIA', accent:0xfda4af });
+
+    // Audio init (no reproduce hasta el primer toque)
+    try {
+      if (this.cache.audio.exists('ocean'))   oceanSnd = this.sound.add('ocean', { loop:true, volume: 0.28 });
+      if (this.cache.audio.exists('whistle')) whistleSnd = this.sound.add('whistle', { volume: 0.65 });
+    } catch(e) {}
+
+    this.input.on('pointerdown', () => unlockAudio(this), { once: true });
+
+    ovBtn.onclick = () => { overlay.classList.remove('on'); this.scene.restart(); };
+
+    kickoff(this, 'A');
+  }
+
+  function update(time, dt){
+    if (!state || !state.running) return;
+
+    // mar
+    waveT += dt * 0.001;
+    waterTile.tilePositionX += 0.22;
+    foamTile.tilePositionX  += 0.55;
+    foamTile.y = 180 + Math.sin(waveT*2.6)*1.6;
+
+    // shadows/labels
+    syncChar(you); syncChar(her); syncChar(dog); syncChar(cat);
+
+    // movimiento humano
+    const speedYou = 590;
+    const speedHer = 575;
+    you.setVelocity(leftJoy.vec.x * speedYou, leftJoy.vec.y * speedYou);
+    her.setVelocity(rightJoy.vec.x * speedHer, rightJoy.vec.y * speedHer);
+
+    // ✅ ayuda para “tomar” el balón (sin sentirse imán)
+    assistTakeBall(you, 0.10);
+    assistTakeBall(her, 0.10);
+
+    // dribble suave para ambos
+    assistDribble(you);
+    assistDribble(her);
+
+    // kick
+    if (leftJoy.kickQueued)  { leftJoy.kickQueued = false; attemptKick(you,  leftJoy.vec, true); }
+    if (rightJoy.kickQueued) { rightJoy.kickQueued = false; attemptKick(her, rightJoy.vec, true); }
+
+    // ✅ IA: roles + juego en equipo (pase/tiro)
+    pickRoles();
+    for (const npc of npcs) npcAI(npc, dt);
+  }
+
+  function unlockAudio(scene){
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+
+    // Phaser (si existe el mp3)
+    try {
+      scene.sound.unlock();
+      if (oceanSnd && !oceanSnd.isPlaying) oceanSnd.play();
+    } catch(e){}
+
+    // Fallback WebAudio (si no hay mp3 o no pudo reproducir)
+    if (!oceanSnd) {
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        waCtx = new AC();
+        waOcean = startOcean(waCtx);
+      } catch(e){}
+    }
+  }
+
+  function playWhistle(){
+    if (whistleSnd) {
+      try { whistleSnd.play(); } catch(e){}
+      return;
+    }
+    // fallback beep
+    if (!waCtx) {
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        waCtx = new AC();
+      } catch(e){ return; }
+    }
+    whistleBeep(waCtx);
+  }
+
+  function syncHUD(){
+    uiScoreA.textContent = String(state.scoreA);
+    uiScoreB.textContent = String(state.scoreB);
+    uiTime.textContent   = fmtTime(state.timeLeft);
+  }
+
+  // ====== ARCOS ======
+  function drawGoals(scene){
+    const g = scene.add.graphics();
+
+    const gapY = FIELD.y + (FIELD.h - GOAL.mouth)/2;
+    const gapH = GOAL.mouth;
+
+    g.fillStyle(0x000000, 0.12);
+    g.fillRoundedRect(FIELD.x - GOAL.depth - 10, gapY - 10, GOAL.depth + 10, gapH + 20, 16);
+    g.fillRoundedRect(FIELD.x + FIELD.w, gapY - 10, GOAL.depth + 10, gapH + 20, 16);
+
+    g.lineStyle(12, 0xffffff, 0.90);
+    g.strokeRoundedRect(FIELD.x - GOAL.depth, gapY, GOAL.depth, gapH, 12);
+    g.strokeRoundedRect(FIELD.x + FIELD.w, gapY, GOAL.depth, gapH, 12);
+
+    g.lineStyle(5, 0x93c5fd, 0.38);
+    g.strokeRoundedRect(FIELD.x - GOAL.depth, gapY, GOAL.depth, gapH, 12);
+    g.strokeRoundedRect(FIELD.x + FIELD.w, gapY, GOAL.depth, gapH, 12);
+
+    g.lineStyle(2, 0xffffff, 0.20);
+    for (let i=0;i<10;i++){
+      const yy = gapY + (i+1)*(gapH/11);
+      g.lineBetween(FIELD.x - GOAL.depth + 6, yy, FIELD.x - 6, yy);
+      g.lineBetween(FIELD.x + FIELD.w + GOAL.depth - 6, yy, FIELD.x + FIELD.w + 6, yy);
+    }
+    for (let i=0;i<6;i++){
+      const xxL = FIELD.x - GOAL.depth + 6 + (i+1)*((GOAL.depth-12)/7);
+      g.lineBetween(xxL, gapY + 6, xxL, gapY + gapH - 6);
+
+      const xxR = FIELD.x + FIELD.w + 6 + (i+1)*((GOAL.depth-12)/7);
+      g.lineBetween(xxR, gapY + 6, xxR, gapY + gapH - 6);
+    }
+  }
+
+  // ====== JOYSTICK ======
+  function createJoystick(scene, opts){
+    const safeBottom = 34;
+    const isLeft = opts.side === 'left';
+    const homeX = isLeft ? 150 : (W - 150);
+    const homeY = H - 160 - safeBottom;
+
+    const joy = {
+      base: scene.add.circle(homeX, homeY, 70, 0xffffff, 0.08).setDepth(200),
+      knob: scene.add.circle(homeX, homeY, 30, 0xffffff, 0.16).setDepth(201),
+      vec: new Phaser.Math.Vector2(0,0),
+      active: false,
+      pointerId: null,
+      center: new Phaser.Math.Vector2(homeX, homeY),
+      kickQueued: false,
+      kickGfx: scene.add.graphics().setDepth(200),
+      kickTxt: null,
+      kickZone: null,
+      homeX, homeY
+    };
+
+    joy.base.setStrokeStyle(2, 0xffffff, 0.16);
+    joy.knob.setStrokeStyle(2, 0xffffff, 0.18);
+
+    // botón patear
+    const bx = isLeft ? 310 : (W - 310);
+    const by = H - 160 - safeBottom;
+    const bw = 190;
+    const bh = 72;
+    const br = 18;
+
+    drawKickButton(joy.kickGfx, bx, by, bw, bh, br, 0xffffff, 0.90);
+    joy.kickTxt = scene.add.text(bx, by, 'PATEAR ⚽', {
+      fontSize: '18px',
+      fontStyle: '1000',
+      color: '#0b1220'
+    }).setOrigin(0.5).setDepth(201);
+
+    joy.kickZone = scene.add.zone(bx, by, bw, bh).setDepth(220).setInteractive();
+
+    scene.add.text(isLeft ? 70 : (W-70), by - 56, opts.label, {
+      fontSize: '14px',
+      fontStyle: '1000',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 6
+    }).setOrigin(isLeft ? 0 : 1, 0.5).setDepth(201);
+
+    // zona joystick: mitad
+    const zx = isLeft ? W*0.25 : W*0.75;
+    const zw = W*0.5;
+    const zone = scene.add.zone(zx, H*0.62, zw, H).setDepth(210).setInteractive();
+
+    zone.on('pointerdown', (p) => {
+      joy.active = true;
+      joy.pointerId = p.id;
+      joy.center.set(p.x, p.y);
+      joy.base.setPosition(joy.center.x, joy.center.y);
+      joy.knob.setPosition(joy.center.x, joy.center.y);
+      joy.vec.set(0,0);
+    });
+
+    zone.on('pointermove', (p) => {
+      if (!joy.active || p.id !== joy.pointerId) return;
+      setJoy(joy, p.x - joy.center.x, p.y - joy.center.y);
+    });
+
+    const endJoy = (p) => {
+      if (joy.pointerId !== null && p.id !== joy.pointerId) return;
+      joy.active = false;
+      joy.pointerId = null;
+      joy.vec.set(0,0);
+
+      scene.tweens.add({
+        targets: [joy.base, joy.knob],
+        x: joy.homeX, y: joy.homeY,
+        duration: 120, ease: 'Sine.out',
+        onComplete: () => {
+          joy.center.set(joy.homeX, joy.homeY);
+          joy.knob.setPosition(joy.homeX, joy.homeY);
+        }
+      });
+    };
+
+    zone.on('pointerup', endJoy);
+    scene.input.on('pointerup', endJoy);
+
+    joy.kickZone.on('pointerdown', () => {
+      joy.kickQueued = true;
+      scene.tweens.add({ targets: [joy.kickGfx, joy.kickTxt], scaleX: 0.98, scaleY: 0.98, duration: 70, yoyo:true });
+    });
+
+    return joy;
+  }
+
+  function drawKickButton(gfx, cx, cy, w, h, r, color, alpha){
+    gfx.clear();
+    gfx.fillStyle(color, alpha);
+    gfx.lineStyle(2, 0xffffff, 0.10);
+    const x = cx - w/2;
+    const y = cy - h/2;
+    gfx.fillRoundedRect(x, y, w, h, r);
+    gfx.strokeRoundedRect(x, y, w, h, r);
+  }
+
+  function setJoy(joy, dx, dy){
+    const max = 46;
+    const len = Math.hypot(dx, dy);
+    const k = (len > max) ? (max/len) : 1;
+    const x = dx * k;
+    const y = dy * k;
+
+    joy.knob.setPosition(joy.center.x + x, joy.center.y + y);
+    joy.vec.set(Phaser.Math.Clamp(x/max, -1, 1), Phaser.Math.Clamp(y/max, -1, 1));
+    if (Math.abs(joy.vec.x) < 0.08) joy.vec.x = 0;
+    if (Math.abs(joy.vec.y) < 0.08) joy.vec.y = 0;
+  }
+
+  // ====== Characters (JPG) ======
+  function makeCharacter(scene, x, y, key, label, accent){
+    if (!scene.textures.exists(key) || scene.textures.get(key).key === '__MISSING') {
+      const g = scene.add.graphics();
+      g.fillStyle(accent || 0x93c5fd, 1);
+      g.fillRoundedRect(0,0,CHAR.size,CHAR.size,22);
+      g.generateTexture(key+'_fallback', CHAR.size, CHAR.size);
+      g.destroy();
+      key = key+'_fallback';
+    }
+
+    const p = scene.physics.add.sprite(x, y, key);
+    p.setDisplaySize(CHAR.size, CHAR.size);
+    p.setCircle(CHAR.r, CHAR.off, CHAR.off);
+    p.setMaxVelocity(700);
+    p.setDamping(false);
+    p.setDrag(0);
+
+    const sh = scene.add.ellipse(x, y + (CHAR.size*0.43), CHAR.size*0.75, CHAR.size*0.18, 0x000000, 0.18);
+    sh.setBlendMode(Phaser.BlendModes.MULTIPLY);
+
+    const frame = scene.add.graphics();
+    frame.setDepth(49);
+
+    const t = scene.add.text(x, y - (CHAR.size*0.78), label, {
+      fontSize: '15px',
+      fontStyle: '1000',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 6
+    }).setOrigin(0.5);
+
+    p._shadow = sh;
+    p._frame = frame;
+    p._label = t;
+    p._accent = accent || 0xffffff;
+
+    return p;
+  }
+
+  function syncChar(p){
+    if (!p) return;
+    if (p._shadow){ p._shadow.x = p.x; p._shadow.y = p.y + (CHAR.size*0.43); }
+    if (p._label){ p._label.x = p.x; p._label.y = p.y - (CHAR.size*0.78); }
+    if (p._frame){
+      p._frame.clear();
+      p._frame.lineStyle(6, 0x0b1220, 0.30);
+      p._frame.strokeRoundedRect(p.x-CHAR.size/2, p.y-CHAR.size/2, CHAR.size, CHAR.size, 22);
+      p._frame.lineStyle(3, p._accent, 0.32);
+      p._frame.strokeRoundedRect(p.x-CHAR.size/2, p.y-CHAR.size/2, CHAR.size, CHAR.size, 22);
+    }
+  }
+
+  function fmtTime(s){
+    const m = Math.floor(s/60);
+    const ss = String(s%60).padStart(2,'0');
+    return `${String(m).padStart(2,'0')}:${ss}`;
+  }
+
+  function softBump(p){
+    const d = Phaser.Math.Distance.Between(p.x,p.y, ball.x, ball.y);
+    if (d > 86) return;
+    const ang = Phaser.Math.Angle.Between(p.x, p.y, ball.x, ball.y);
+    const extra = (p === you || p === her) ? 70 : 28;
+    ball.setVelocity(
+      ball.body.velocity.x + Math.cos(ang)*extra,
+      ball.body.velocity.y + Math.sin(ang)*extra
+    );
+  }
+
+  function assistTakeBall(player, amount){
+    const d = Phaser.Math.Distance.Between(player.x, player.y, ball.x, ball.y);
+    if (d > 70) return;
+
+    const bv = new Phaser.Math.Vector2(ball.body.velocity.x, ball.body.velocity.y);
+    if (bv.length() > 860) return;
+
+    const pv = new Phaser.Math.Vector2(player.body.velocity.x, player.body.velocity.y);
+    const toP = new Phaser.Math.Vector2(player.x - ball.x, player.y - ball.y).normalize().scale(110);
+    const target = pv.clone().add(toP);
+
+    const nv = bv.lerp(target, amount);
+    ball.setVelocity(nv.x, nv.y);
+  }
+
+  function assistDribble(player){
+    const d = Phaser.Math.Distance.Between(player.x, player.y, ball.x, ball.y);
+    if (d > 92) return;
+
+    const v = new Phaser.Math.Vector2(ball.body.velocity.x, ball.body.velocity.y);
+    const sp = v.length();
+    if (sp > 780) return;
+
+    const pv = new Phaser.Math.Vector2(player.body.velocity.x, player.body.velocity.y);
+    const psp = pv.length();
+    const dir = psp > 1 ? pv.clone().normalize() : new Phaser.Math.Vector2(ball.x - player.x, ball.y - player.y).normalize();
+    const targetVel = pv.clone().add(dir.scale(110));
+    const nv = v.lerp(targetVel, 0.10);
+    ball.setVelocity(nv.x, nv.y);
+  }
+
+  function attemptKick(p, vec, strong){
+    const d = Phaser.Math.Distance.Between(p.x,p.y, ball.x, ball.y);
+    if (d > 115) return;
+
+    const mv = new Phaser.Math.Vector2(vec.x, vec.y);
+    let dir;
+    if (mv.length() > 0.22) dir = mv.normalize();
+    else {
+      const ang = Phaser.Math.Angle.Between(p.x,p.y, ball.x, ball.y);
+      dir = new Phaser.Math.Vector2(Math.cos(ang), Math.sin(ang));
+    }
+
+    const power = strong ? 980 : 820;
+    ball.setVelocity(dir.x * power, dir.y * power);
+  }
+
+  function pickRoles(){
+    const dDog = Phaser.Math.Distance.Between(dog.x, dog.y, ball.x, ball.y);
+    const dCat = Phaser.Math.Distance.Between(cat.x, cat.y, ball.x, ball.y);
+    striker = (dDog <= dCat) ? dog : cat;
+    support = (striker === dog) ? cat : dog;
+    dog.ai.role = (dog === striker) ? 'striker' : 'support';
+    cat.ai.role = (cat === striker) ? 'striker' : 'support';
+  }
+
+  // ====== IA: MÁS DIFÍCIL + EQUIPO (PASES) ======
+  function npcAI(npc, dt){
+    npc.ai.kickCd = Math.max(0, npc.ai.kickCd - dt);
+    npc.ai.thinkT = Math.max(0, npc.ai.thinkT - dt);
+
+    const mate = (npc === dog) ? cat : dog;
+    const isStriker = (npc.ai.role === 'striker');
+
+    if (npc.ai.thinkT <= 0){
+      // más reactivos
+      npc.ai.thinkT = Phaser.Math.Between(80, 150);
+
+      const toBall = new Phaser.Math.Vector2(ball.x - npc.x, ball.y - npc.y);
+      const dBall = toBall.length();
+      toBall.normalize();
+
+      // un poquito de "merciful" si humanos están pegados
+      const distA = Phaser.Math.Distance.Between(you.x, you.y, ball.x, ball.y);
+      const distB = Phaser.Math.Distance.Between(her.x, her.y, ball.x, ball.y);
+      const mercy = (Math.min(distA, distB) < 120) ? 0.88 : 1.0;
+
+      // mover: striker va al balón, support busca pase/espacio
+      let tx, ty;
+
+      if (isStriker){
+        tx = ball.x + ball.body.velocity.x * 0.12;
+        ty = ball.y + ball.body.velocity.y * 0.12;
+      } else {
+        // soporte se adelanta hacia el arco izquierdo y se separa del striker
+        const aheadX = Phaser.Math.Clamp(ball.x - 120, FIELD.x + 140, FIELD.x + FIELD.w - 140);
+        const spreadY = (mate.y < FIELD.y + FIELD.h/2) ? (FIELD.y + FIELD.h*0.72) : (FIELD.y + FIELD.h*0.28);
+        tx = aheadX;
+        ty = Phaser.Math.Clamp(spreadY + Phaser.Math.Between(-80,80), FIELD.y + 80, FIELD.y + FIELD.h - 80);
+
+        // si se están apilando, separa
+        const sep = Phaser.Math.Distance.Between(npc.x, npc.y, mate.x, mate.y);
+        if (sep < 120) ty = Phaser.Math.Clamp(ty + (npc.y < mate.y ? -90 : 90), FIELD.y + 80, FIELD.y + FIELD.h - 80);
+      }
+
+      const to = new Phaser.Math.Vector2(tx - npc.x, ty - npc.y);
+      const dist = to.length();
+      to.normalize();
+
+      const errA = Phaser.Math.FloatBetween(-0.22, 0.22);
+      const dir = new Phaser.Math.Vector2(
+        Math.cos(errA) * to.x - Math.sin(errA) * to.y,
+        Math.sin(errA) * to.x + Math.cos(errA) * to.y
+      ).normalize();
+
+      const baseSpeed = isStriker ? 420 : 380;
+      const speed = baseSpeed * mercy * (dist < 120 ? 0.90 : 1.0);
+      npc.ai.vx = dir.x * speed;
+      npc.ai.vy = dir.y * speed;
+
+      // decisiones con balón (tiro/pase)
+      if (dBall < 110 && npc.ai.kickCd <= 0){
+        const goalX = (FIELD.x - 30);
+        const goalY = FIELD.y + FIELD.h/2;
+
+        const mateDist = Phaser.Math.Distance.Between(npc.x, npc.y, mate.x, mate.y);
+        const mateMarked = Math.min(
+          Phaser.Math.Distance.Between(you.x, you.y, mate.x, mate.y),
+          Phaser.Math.Distance.Between(her.x, her.y, mate.x, mate.y)
+        ) < 140;
+
+        const mateAhead = mate.x < npc.x - 10; // hacia arco izquierdo
+        const canPass = mateAhead && mateDist > 130 && mateDist < 340 && !mateMarked;
+
+        const closeToGoal = npc.x < FIELD.x + FIELD.w*0.45;
+        const shootChance = closeToGoal ? 0.72 : 0.55;
+
+        if (isStriker && canPass && Math.random() < 0.68) {
+          // pase a los pies (con poquito lead)
+          const px = mate.x + mate.body.velocity.x * 0.10;
+          const py = mate.y + mate.body.velocity.y * 0.10;
+          const ang = Phaser.Math.Angle.Between(npc.x, npc.y, px, py);
+          const err = Phaser.Math.FloatBetween(-0.10, 0.10);
+          const power = Phaser.Math.Between(680, 840);
+          ball.setVelocity(Math.cos(ang+err)*power, Math.sin(ang+err)*power);
+          npc.ai.kickCd = Phaser.Math.Between(520, 820);
+        } else if (Math.random() < shootChance) {
+          // tiro al arco
+          const ang = Phaser.Math.Angle.Between(npc.x, npc.y, goalX, goalY + Phaser.Math.Between(-120,120));
+          const err = Phaser.Math.FloatBetween(-0.18, 0.18);
+          const power = Phaser.Math.Between(720, 940);
+          ball.setVelocity(Math.cos(ang+err)*power, Math.sin(ang+err)*power);
+          npc.ai.kickCd = Phaser.Math.Between(560, 860);
+        } else {
+          // dribble empujón
+          const ang = Phaser.Math.Angle.Between(npc.x, npc.y, goalX, goalY + Phaser.Math.Between(-140,140));
+          const power = Phaser.Math.Between(540, 720);
+          ball.setVelocity(Math.cos(ang)*power, Math.sin(ang)*power);
+          npc.ai.kickCd = Phaser.Math.Between(420, 700);
+        }
+      }
+    }
+
+    npc.setVelocity(npc.ai.vx, npc.ai.vy);
+  }
+
+  function kickoff(scene, who){
+    ball.setVelocity(0,0);
+    ball.setPosition(FIELD.x + FIELD.w/2, FIELD.y + FIELD.h/2);
+
+    you.setPosition(FIELD.x + FIELD.w*0.30, FIELD.y + FIELD.h*0.70);
+    her.setPosition(FIELD.x + FIELD.w*0.30, FIELD.y + FIELD.h*0.30);
+    dog.setPosition(FIELD.x + FIELD.w*0.70, FIELD.y + FIELD.h*0.70);
+    cat.setPosition(FIELD.x + FIELD.w*0.70, FIELD.y + FIELD.h*0.30);
+
+    you.setVelocity(0,0); her.setVelocity(0,0); dog.setVelocity(0,0); cat.setVelocity(0,0);
+
+    scene.time.delayedCall(250, () => {
+      if (!state.running) return;
+      const dir = (who === 'A') ? 1 : -1;
+      ball.setVelocity(200*dir, Phaser.Math.Between(-60,60));
+    });
+  }
+
+  function goal(scene, team){
+    if (!state.running) return;
+    state.running = false;
+
+    // ✅ silbato
+    playWhistle();
+
+    if (team === 'A') state.scoreA++;
+    else state.scoreB++;
+
+    syncHUD();
+    scene.cameras.main.shake(150, 0.005);
+
+    const txt = scene.add.text(W/2, 220, '¡GOOOL! ⚽✨', {
+      fontSize: '64px',
+      color: '#ffffff',
+      fontStyle: '1000',
+      stroke: '#000000',
+      strokeThickness: 10
+    }).setOrigin(0.5).setAlpha(0);
+
+    scene.tweens.add({
+      targets: txt,
+      alpha: 1,
+      y: 245,
+      duration: 220,
+      ease: 'Back.out',
+      yoyo: true,
+      hold: 650,
+      onComplete: () => txt.destroy()
+    });
+
+    const done = (state.scoreA >= state.targetScore || state.scoreB >= state.targetScore);
+
+    scene.time.delayedCall(1050, () => {
+      if (done) endMatch();
+      else {
+        state.running = true;
+        kickoff(scene, team === 'A' ? 'B' : 'A');
+      }
+    });
+  }
+
+  function endMatch(){
+    if (!state) return;
+    state.running = false;
+
+    let title = '¡EMPATE! 🤝';
+    if (state.scoreA > state.scoreB) title = '¡GANÓ LUCAS & VALERIA! 💞⚽'; 
+    // si ganó la pareja:
+    if (state.scoreA > state.scoreB) localStorage.setItem('bm_done_futbol', '1');
+
+    if (state.scoreB > state.scoreA) title = '¡GANARON COYA & EMMA! 🐶🐱';
+
+    ovTitle.textContent = title;
+    ovDesc.textContent = `Final: Pareja ${state.scoreA} — ${state.scoreB} Mascotas. ¿Otra?`;
+    overlay.classList.add('on');
+  }
+
+  // ===== WebAudio fallback: mar + silbato =====
+  function startOcean(ctx){
+    const bufferSize = Math.floor(ctx.sampleRate * 2);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i=0;i<bufferSize;i++) data[i] = (Math.random()*2 - 1) * 0.85;
+
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 900;
+
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 70;
+
+    const gain = ctx.createGain();
+    gain.gain.value = 0.0;
+
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 0.18;
+
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 0.07;
+
+    lfo.connect(lfoGain);
+    lfoGain.connect(gain.gain);
+
+    src.connect(lp);
+    lp.connect(hp);
+    hp.connect(gain);
+    gain.connect(ctx.destination);
+
+    const t = ctx.currentTime;
+    gain.gain.setValueAtTime(0.0, t);
+    gain.gain.linearRampToValueAtTime(0.10, t + 1.4);
+
+    try { src.start(); lfo.start(); } catch(e) {}
+    return { src, gain, lfo, lp, hp };
+  }
+
+  function whistleBeep(ctx){
+    const o1 = ctx.createOscillator();
+    const o2 = ctx.createOscillator();
+    o1.type = 'sine';
+    o2.type = 'sine';
+
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1850;
+    bp.Q.value = 9;
+
+    const g = ctx.createGain();
+    g.gain.value = 0;
+
+    o1.connect(bp);
+    o2.connect(bp);
+    bp.connect(g);
+    g.connect(ctx.destination);
+
+    const t = ctx.currentTime;
+    o1.frequency.setValueAtTime(1650, t);
+    o2.frequency.setValueAtTime(2100, t);
+    o1.frequency.linearRampToValueAtTime(2150, t + 0.18);
+    o2.frequency.linearRampToValueAtTime(2700, t + 0.18);
+
+    g.gain.setValueAtTime(0.0, t);
+    g.gain.linearRampToValueAtTime(0.18, t + 0.02);
+    g.gain.linearRampToValueAtTime(0.07, t + 0.14);
+    g.gain.linearRampToValueAtTime(0.0,  t + 0.30);
+
+    try { o1.start(t); o2.start(t); o1.stop(t+0.32); o2.stop(t+0.32); } catch(e) {}
+  }
+})();
+</script>
+
+</body>
+</html>

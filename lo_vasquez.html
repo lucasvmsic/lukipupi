@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Lo Vásquez en Bici 🚲✨ (Lucas & Valeria)</title>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+  <style>
+    :root { color-scheme: dark; }
+    html, body{
+      margin:0; padding:0; height:100%;
+      background:#05070c; overflow:hidden;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior: none;
+    }
+    canvas { display:block; }
+
+    .hud{
+      position: fixed;
+      left: 0; right: 0;
+      top: env(safe-area-inset-top, 0);
+      padding: 10px 12px 6px;
+      z-index: 30;
+      pointer-events: none;
+      user-select: none;
+    }
+    .hudInner{
+      width: min(920px, calc(100vw - 24px));
+      margin: 0 auto;
+      display:flex;
+      gap: 10px;
+      align-items: stretch;
+    }
+    .chip{
+      padding: 10px 12px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.14);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 14px 40px rgba(0,0,0,0.30);
+      color:#fff;
+      min-width: 118px;
+      flex: 0 0 auto;
+    }
+    .chip.grow{ flex: 1 1 auto; min-width: 0; }
+    .label{
+      font-size: 10px;
+      letter-spacing: .14em;
+      opacity:.85;
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .value{
+      margin-top:2px;
+      font-size: 18px;
+      font-weight: 950;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .barWrap{
+      width: min(920px, calc(100vw - 24px));
+      margin: 8px auto 0;
+      padding: 0 2px;
+      pointer-events:none;
+    }
+    .barOuter{
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.16);
+      overflow: hidden;
+      box-shadow: 0 14px 40px rgba(0,0,0,0.28);
+    }
+    .barInner{
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(168,85,247,0.95), rgba(56,189,248,0.95), rgba(34,197,94,0.95));
+    }
+
+    .hint{
+      position: fixed;
+      left: 0; right: 0;
+      bottom: calc(env(safe-area-inset-bottom, 0) + 10px);
+      padding: 0 12px;
+      z-index: 30;
+      text-align:center;
+      font-size: 12px;
+      font-weight: 850;
+      color: rgba(255,255,255,0.84);
+      text-shadow: 0 10px 24px rgba(0,0,0,0.42);
+      pointer-events:none;
+      user-select:none;
+    }
+
+    .overlay{
+      position: fixed; inset: 0;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding: 18px;
+      background: rgba(0,0,0,0.62);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      z-index: 999;
+    }
+    .overlay.on{ display:flex; }
+    .modal{
+      width: min(760px, 92vw);
+      border-radius: 24px;
+      padding: 18px 16px 16px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.18);
+      box-shadow: 0 26px 90px rgba(0,0,0,0.55);
+      text-align:center;
+      color:#fff;
+    }
+    .modal h1{
+      margin: 6px 0 10px;
+      font-size: clamp(22px, 5vw, 44px);
+      line-height: 1.05;
+      font-weight: 1000;
+      text-shadow: 0 12px 26px rgba(0,0,0,0.35);
+    }
+    .modal p{ margin:0 0 14px; font-size: 14px; opacity: .92; line-height: 1.35; }
+    .modalBtn{
+      width: min(520px, 92%);
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 0;
+      cursor: pointer;
+      background: #fff;
+      color:#0b1220;
+      font-weight: 1000;
+      font-size: 16px;
+      box-shadow: 0 18px 44px rgba(0,0,0,0.35);
+      pointer-events: auto;
+    }
+    .modalBtn:active{ transform: translateY(1px); }
+  </style>
+</head>
+<body>
+
+  <div class="hud">
+    <div class="hudInner">
+      <div class="chip">
+        <div class="label">Etapa</div>
+        <div class="value" id="uiStage">—</div>
+      </div>
+      <div class="chip grow">
+        <div class="label">Historia</div>
+        <div class="value" id="uiMsg">—</div>
+      </div>
+      <div class="chip">
+        <div class="label">Golpes</div>
+        <div class="value" id="uiHits">0/6</div>
+      </div>
+      <div class="chip">
+        <div class="label">Pedaleo</div>
+        <div class="value" id="uiPower">0%</div>
+      </div>
+    </div>
+    <div class="barWrap">
+      <div class="barOuter"><div class="barInner" id="uiBar"></div></div>
+    </div>
+  </div>
+
+  <div class="hint" id="uiHint">Arrastra para dirigir · Tap-tap “PEDALEAR” para acelerar</div>
+
+  <div class="overlay on" id="overlay">
+    <div class="modal">
+      <h1 id="ovTitle">Lo Vásquez</h1>
+      <p id="ovDesc">
+        Manejas la bici <b>morada</b> (Valeria). Lucas va en la <b>roja</b> contigo.<br>
+        Noche → amanece → feria Lo Vásquez (laberinto de toldos) → salida → Valpo → playa 🌊
+      </p>
+      <button class="modalBtn" id="ovBtn">EMPEZAR 🚲</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // =========================================
+  // AUDIO (OPCIONAL) — evitar 404 por defecto
+  // =========================================
+  const USE_AUDIO_FILES = false; // <- pon true si tienes mp3 en /assets/audio/
+  const AUDIO_PATHS = {
+    night: 'assets/audio/noche.mp3',
+    fair:  'assets/audio/feria.mp3',
+    sea:   'assets/audio/mar.mp3',
+    hit:   'assets/audio/golpe.mp3'
+  };
+
+  // ==========================
+  // DOM HUD
+  // ==========================
+  const uiStage = document.getElementById('uiStage');
+  const uiMsg   = document.getElementById('uiMsg');
+  const uiHits  = document.getElementById('uiHits');
+  const uiPower = document.getElementById('uiPower');
+  const uiBar   = document.getElementById('uiBar');
+  const uiHint  = document.getElementById('uiHint');
+
+  const overlay = document.getElementById('overlay');
+  const ovTitle = document.getElementById('ovTitle');
+  const ovDesc  = document.getElementById('ovDesc');
+  const ovBtn   = document.getElementById('ovBtn');
+
+  // ==========================
+  // GAME CONSTANTS
+  // ==========================
+  const W = 800, H = 1200;
+
+  const G = {
+    hits: 0,
+    maxHits: 6,
+    audioUnlocked: false,
+    started: false
+  };
+
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
+
+  function syncHUD(stageLabel, msg, bar01, power01){
+    uiStage.textContent = stageLabel;
+    uiMsg.textContent = msg;
+    uiHits.textContent = `${G.hits}/${G.maxHits}`;
+    uiBar.style.width = `${clamp01(bar01)*100}%`;
+    uiPower.textContent = `${Math.round(clamp01(power01)*100)}%`;
+  }
+
+  // ==========================
+  // AUDIO MANAGER (simple)
+  // ==========================
+  const AudioMgr = (() => {
+    let ctx = null;
+    let loops = { night:null, fair:null, sea:null };
+    let hit = null;
+
+    function ensureCtx(){
+      if (ctx) return ctx;
+      try { ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch(e){ ctx = null; }
+      return ctx;
+    }
+
+    function unlock(){
+      if (G.audioUnlocked) return;
+      G.audioUnlocked = true;
+      const c = ensureCtx();
+      if (c && c.state === 'suspended') { try { c.resume(); } catch(e) {} }
+
+      if (USE_AUDIO_FILES){
+        loops.night = new Audio(AUDIO_PATHS.night);
+        loops.fair  = new Audio(AUDIO_PATHS.fair);
+        loops.sea   = new Audio(AUDIO_PATHS.sea);
+        hit         = new Audio(AUDIO_PATHS.hit);
+
+        Object.values(loops).forEach(a => { a.loop = true; a.volume = 0.25; a.preload = 'auto'; });
+        hit.loop = false; hit.volume = 0.55; hit.preload = 'auto';
+      }
+    }
+
+    function stopAllLoops(){
+      for (const k of Object.keys(loops)){
+        const a = loops[k];
+        if (!a) continue;
+        try { a.pause(); a.currentTime = 0; } catch(e) {}
+      }
+    }
+
+    function playLoop(which){
+      if (!USE_AUDIO_FILES) return;
+      stopAllLoops();
+      const a = loops[which];
+      if (!a) return;
+      try {
+        a.currentTime = 0;
+        const p = a.play();
+        if (p && p.catch) p.catch(()=>{});
+      } catch(e) {}
+    }
+
+    function sfxHit(){
+      if (USE_AUDIO_FILES && hit){
+        try { hit.currentTime = 0; const p = hit.play(); if (p && p.catch) p.catch(()=>{}); } catch(e) {}
+        return;
+      }
+      // fallback beep
+      const c = ensureCtx();
+      if (!c || c.state !== 'running') return;
+      const o = c.createOscillator();
+      const g = c.createGain();
+      o.type = 'triangle';
+      o.frequency.value = 220;
+      g.gain.value = 0.0;
+      o.connect(g); g.connect(c.destination);
+      const t = c.currentTime;
+      g.gain.linearRampToValueAtTime(0.22, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      try { o.start(t); o.stop(t + 0.20); } catch(e) {}
+    }
+
+    return { unlock, playLoop, stopAllLoops, sfxHit };
+  })();
+
+  // ==========================
+  // UI toast
+  // ==========================
+  function toast(scene, text, color){
+    const t = scene.add.text(W/2, 230, text, {
+      fontSize: '46px',
+      fontStyle: '1000',
+      color: color || '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 10
+    }).setOrigin(0.5).setDepth(999).setAlpha(0);
+
+    scene.tweens.add({
+      targets: t,
+      alpha: 1,
+      y: 255,
+      duration: 220,
+      ease: 'Back.out',
+      yoyo: true,
+      hold: 720,
+      onComplete: () => t.destroy()
+    });
+  }
+
+  // ==========================
+  // TEXTURES
+  // ==========================
+  function makeTextures(scene){
+    const g = scene.add.graphics();
+
+    // Road tile
+    g.clear();
+    g.fillStyle(0x1f2937, 1); g.fillRect(0,0,256,256);
+    g.fillStyle(0x111827, 1); g.fillRect(0,0,256,16); g.fillRect(0,240,256,16);
+    g.fillStyle(0xffffff, 0.10);
+    for (let i=0;i<12;i++){
+      const y = 12 + i*20;
+      g.fillRect(122, y, 12, 12);
+    }
+    g.generateTexture('road', 256, 256);
+
+    // Forest tile
+    g.clear();
+    g.fillStyle(0x06180f, 1); g.fillRect(0,0,128,128);
+    g.fillStyle(0x0e2a1e, 0.9);
+    for (let i=0;i<140;i++){
+      const x = (i*17)%128, y=(i*29)%128;
+      g.fillCircle(x,y,(i%3)+1);
+    }
+    g.fillStyle(0x14532d, 0.55);
+    for (let i=0;i<80;i++){
+      const x = (i*23)%128, y=(i*41)%128;
+      g.fillEllipse(x,y, 10 + (i%3)*4, 18 + (i%4)*3);
+    }
+    g.generateTexture('forest', 128, 128);
+
+    // Tree sprite
+    g.clear();
+    g.fillStyle(0x0b1220, 0.18);
+    g.fillEllipse(50, 104, 72, 18);
+    g.fillStyle(0x4b2e19, 1);
+    g.fillRoundedRect(42, 62, 16, 52, 8);
+    g.fillStyle(0x14532d, 1);
+    g.fillEllipse(50, 54, 78, 54);
+    g.fillEllipse(30, 56, 58, 40);
+    g.fillEllipse(70, 56, 58, 40);
+    g.fillStyle(0x22c55e, 0.15);
+    g.fillEllipse(50, 54, 80, 56);
+    g.generateTexture('tree', 100, 130);
+
+    // Bike Purple (Valeria)
+    g.clear();
+    g.fillStyle(0x000000, 0.18); g.fillEllipse(64, 100, 70, 18);
+    g.lineStyle(10, 0xffffff, 0.90);
+    g.strokeCircle(36, 92, 18); g.strokeCircle(92, 92, 18);
+    g.lineStyle(10, 0xa855f7, 0.98);
+    g.lineBetween(36, 92, 62, 62);
+    g.lineBetween(62, 62, 92, 92);
+    g.lineBetween(92, 92, 54, 92);
+    g.lineBetween(54, 92, 62, 62);
+    g.fillStyle(0xfda4af, 1); g.fillCircle(62, 42, 12);
+    g.fillStyle(0xd8b4fe, 1); g.fillRoundedRect(52, 52, 20, 20, 8);
+    g.generateTexture('bikePurple', 128, 128);
+
+    // Bike Red (Lucas)
+    g.clear();
+    g.fillStyle(0x000000, 0.18); g.fillEllipse(64, 100, 70, 18);
+    g.lineStyle(10, 0xffffff, 0.90);
+    g.strokeCircle(36, 92, 18); g.strokeCircle(92, 92, 18);
+    g.lineStyle(10, 0xef4444, 0.98);
+    g.lineBetween(36, 92, 62, 62);
+    g.lineBetween(62, 62, 92, 92);
+    g.lineBetween(92, 92, 54, 92);
+    g.lineBetween(54, 92, 62, 62);
+    g.fillStyle(0x93c5fd, 1); g.fillCircle(62, 42, 12);
+    g.fillStyle(0xfca5a5, 1); g.fillRoundedRect(52, 52, 20, 20, 8);
+    g.generateTexture('bikeRed', 128, 128);
+
+    // Cyclist obstacle (base)
+    g.clear();
+    g.fillStyle(0x0b1220, 0.18); g.fillEllipse(48, 78, 64, 16);
+    g.lineStyle(8, 0xffffff, 0.85);
+    g.strokeCircle(26, 72, 14); g.strokeCircle(70, 72, 14);
+    g.lineStyle(8, 0x60a5fa, 0.95);
+    g.lineBetween(26, 72, 46, 50);
+    g.lineBetween(46, 50, 70, 72);
+    g.lineBetween(70, 72, 40, 72);
+    g.lineBetween(40, 72, 46, 50);
+    g.fillStyle(0xfde68a, 1); g.fillCircle(46, 30, 10);
+    g.generateTexture('cyclist', 96, 96);
+
+    // Toldo (wall block) — para laberinto (paredes azules)
+    g.clear();
+    // sombra
+    g.fillStyle(0x000000, 0.18);
+    g.fillRoundedRect(4, 10, 56, 52, 12);
+
+    // techo azul
+    g.fillStyle(0x0b5a7a, 1);
+    g.fillRoundedRect(2, 2, 60, 40, 12);
+
+    // franja clara
+    g.fillStyle(0x38bdf8, 0.75);
+    g.fillRoundedRect(2, 2, 60, 10, 10);
+
+    // rayas
+    g.fillStyle(0xffffff, 0.18);
+    for (let i=0;i<5;i++){
+      g.fillRect(8+i*10, 12, 5, 18);
+    }
+
+    // postes
+    g.fillStyle(0x1f2937, 0.55);
+    g.fillRoundedRect(8, 32, 6, 26, 4);
+    g.fillRoundedRect(50, 32, 6, 26, 4);
+
+    // highlight
+    g.fillStyle(0xffffff, 0.06);
+    g.fillRoundedRect(8, 18, 46, 14, 10);
+
+    g.generateTexture('toldo', 64, 64);
+
+    // Person (para “gente por todos lados”)
+    g.clear();
+    g.fillStyle(0x0b1220, 0.18); g.fillEllipse(24, 58, 38, 10);
+    g.fillStyle(0xffffff, 1);    g.fillCircle(24, 22, 12);
+    g.fillStyle(0xffffff, 0.95); g.fillRoundedRect(10, 34, 28, 22, 10);
+    g.generateTexture('person', 48, 68);
+
+    // Star
+    g.clear(); g.fillStyle(0xffffff, 1); g.fillCircle(6,6,6);
+    g.generateTexture('star', 12, 12);
+
+    // Sea tile
+    g.clear();
+    g.fillStyle(0x0b5a7a, 1); g.fillRect(0,0,256,128);
+    g.fillStyle(0x0ea5e9, 0.35);
+    for (let i=0;i<14;i++){
+      g.fillEllipse(12+i*18, 40 + ((i%2)*6), 32, 10);
+      g.fillEllipse(20+i*18, 64 + (((i+1)%2)*6), 28, 8);
+    }
+    g.generateTexture('sea', 256, 128);
+
+    // Couple silhouettes
+    g.clear();
+    g.fillStyle(0x000000, 0.18);
+    g.fillEllipse(92, 152, 130, 24);
+
+    g.fillStyle(0x0b1220, 0.92);
+    // Valeria (izq)
+    g.fillCircle(66, 78, 14);
+    g.fillRoundedRect(52, 92, 28, 56, 14);
+    // Lucas (der)
+    g.fillCircle(116, 74, 15);
+    g.fillRoundedRect(100, 90, 32, 60, 14);
+
+    g.lineStyle(3, 0xffffff, 0.08);
+    g.strokeRoundedRect(46, 64, 96, 92, 20);
+
+    g.generateTexture('couple', 180, 180);
+
+    g.destroy();
+  }
+
+  // ==========================
+  // Pedal model
+  // ==========================
+  function createPedalModel(scene){
+    return {
+      power: 0,
+      pedaling: false,
+      tapBoost: 0.22,
+      holdBoost: 0.05,
+      decayIdle: 0.55,
+      decayHold: 0.28,
+      _timer: scene.time.addEvent({
+        delay: 170, loop: true,
+        callback: () => {
+          if (!scene._pedal) return;
+          const p = scene._pedal;
+          if (p.pedaling){
+            p.power = clamp01(p.power + p.holdBoost);
+          }
+        }
+      }),
+      tap(){ this.power = clamp01(this.power + this.tapBoost); },
+      update(dt){
+        const dts = dt/1000;
+        const decay = this.pedaling ? this.decayHold : this.decayIdle;
+        this.power = clamp01(this.power - decay*dts);
+      }
+    };
+  }
+
+  // ==========================
+  // Pedal button
+  // ==========================
+  function buildPedalButton(scene, text){
+    const safeBottom = 34;
+    const bx = W - 170;
+    const by = H - 150 - safeBottom;
+
+    const gfx = scene.add.graphics().setDepth(200);
+    gfx.fillStyle(0xffffff, 0.92);
+    gfx.fillRoundedRect(bx-120, by-48, 240, 96, 24);
+    gfx.lineStyle(2, 0xffffff, 0.12);
+    gfx.strokeRoundedRect(bx-120, by-48, 240, 96, 24);
+
+    const label = scene.add.text(bx, by, text, {
+      fontSize:'20px', fontStyle:'1000', color:'#0b1220'
+    }).setOrigin(0.5).setDepth(201);
+
+    const zone = scene.add.zone(bx, by, 240, 96).setDepth(210).setInteractive();
+
+    const contains = (x,y) => (Math.abs(x-bx) < 140 && Math.abs(y-by) < 70);
+    const punch = () => scene.tweens.add({ targets:[gfx,label], scaleX:0.98, scaleY:0.98, duration:70, yoyo:true });
+
+    return { zone, contains, punch };
+  }
+
+  // ==========================
+  // MAZE (perfect maze + loops)
+  // ==========================
+  function generatePerfectMaze(colsOdd, rowsOdd){
+    const cols = (colsOdd % 2 === 0) ? colsOdd+1 : colsOdd;
+    const rows = (rowsOdd % 2 === 0) ? rowsOdd+1 : rowsOdd;
+    const grid = Array.from({length: rows}, () => Array(cols).fill(0)); // 0 wall, 1 path
+    function inb(c,r){ return c>0 && r>0 && c<cols-1 && r<rows-1; }
+
+    const start = { c: 1, r: rows-2 };
+    const exit  = { c: cols-2, r: 1 };
+
+    const stack = [];
+    grid[start.r][start.c] = 1;
+    stack.push({c:start.c, r:start.r});
+
+    const dirs = [
+      {dc:2, dr:0}, {dc:-2, dr:0}, {dc:0, dr:2}, {dc:0, dr:-2}
+    ];
+
+    while(stack.length){
+      const cur = stack[stack.length-1];
+      const shuffled = dirs.slice().sort(()=>Math.random()-0.5);
+      let moved = false;
+
+      for (const d of shuffled){
+        const nc = cur.c + d.dc;
+        const nr = cur.r + d.dr;
+        if (!inb(nc,nr)) continue;
+        if (grid[nr][nc] === 1) continue;
+
+        grid[cur.r + d.dr/2][cur.c + d.dc/2] = 1;
+        grid[nr][nc] = 1;
+        stack.push({c:nc, r:nr});
+        moved = true;
+        break;
+      }
+      if (!moved) stack.pop();
+    }
+
+    grid[exit.r][exit.c] = 1;
+
+    // loops extra para que no sea lineal
+    const loops = Math.floor(cols*rows*0.08);
+    for (let i=0;i<loops;i++){
+      const c = Phaser.Math.Between(1, cols-2);
+      const r = Phaser.Math.Between(1, rows-2);
+      if (grid[r][c] === 1) continue;
+      const h = (grid[r][c-1]===1 && grid[r][c+1]===1);
+      const v = (grid[r-1][c]===1 && grid[r+1][c]===1);
+      if (h || v) grid[r][c] = 1;
+    }
+
+    return { grid, start, exit, cols, rows };
+  }
+
+  // ==========================
+  // Obstacles util: tint variants
+  // ==========================
+  function tintCyclist(sprite){
+    // colores distintos para “muchas bicis”
+    const palettes = [
+      0x60a5fa, 0xa855f7, 0x34d399, 0xfbbf24, 0xfb7185, 0x93c5fd
+    ];
+    sprite.setTint(palettes[Phaser.Math.Between(0, palettes.length-1)]);
+  }
+
+  // ==========================
+  // Scenes
+  // ==========================
+  class BootScene extends Phaser.Scene {
+    constructor(){ super('Boot'); }
+    create(){
+      makeTextures(this);
+      this.scene.start('RideToFair');
+    }
+  }
+
+  class RideBaseScene extends Phaser.Scene {
+    // base for RideToFair and RideToValpo (more bikes)
+    setupRide(opts){
+      this.opts = opts;
+
+      // reset hits only at first ride
+      if (opts.resetHits) G.hits = 0;
+      G.started = false;
+
+      this.sky = this.add.rectangle(W/2, H/2, W, H, opts.skyColor, 1).setDepth(0);
+
+      this.forestL = this.add.tileSprite(110, H/2, 240, H, 'forest').setAlpha(0.95).setDepth(1);
+      this.forestR = this.add.tileSprite(W-110, H/2, 240, H, 'forest').setAlpha(0.95).setDepth(1);
+
+      this.trees = this.add.group();
+      for (let i=0;i<12;i++){
+        const x = (i%2===0) ? Phaser.Math.Between(25, 150) : Phaser.Math.Between(W-150, W-25);
+        const y = Phaser.Math.Between(80, H+120);
+        const t = this.add.image(x, y, 'tree').setDepth(2).setAlpha(opts.treeAlpha);
+        t.setScale(Phaser.Math.FloatBetween(0.80, 1.12));
+        t._spd = Phaser.Math.Between(85, 170);
+        this.trees.add(t);
+      }
+
+      this.road = this.add.tileSprite(W/2, H/2, opts.roadW, H+240, 'road').setDepth(3);
+
+      // stars for night
+      if (opts.stars){
+        this.starFx = this.add.particles('star').setDepth(4);
+        this.starFx.createEmitter({
+          x: { min: 0, max: W },
+          y: { min: -20, max: H*0.55 },
+          lifespan: { min: 2000, max: 3200 },
+          speedY: { min: 16, max: 58 },
+          scale: { start: 0.24, end: 0.0 },
+          alpha: { start: 0.30, end: 0.0 },
+          quantity: 1,
+          frequency: 22
+        });
+      }
+
+      // day features
+      if (opts.sun){
+        this.sun = this.add.circle(W-120, 160, 58, 0xfde68a, opts.sunAlpha).setDepth(1);
+        this.sunGlow = this.add.circle(W-120, 160, 118, 0xfde68a, opts.sunGlowAlpha).setDepth(1);
+      }
+      if (opts.seaHint){
+        this.sea = this.add.tileSprite(W/2 + 230, 240, W, H*0.55, 'sea').setAlpha(0.55).setDepth(1);
+      }
+
+      // night overlay for rideToFair only
+      if (opts.nightOverlay){
+        this.night = this.add.rectangle(W/2, H/2, W, H, 0x05070c, 0.62).setDepth(10);
+        this.sun = this.add.circle(W-120, 180, 52, 0xfde68a, 0.0).setDepth(9);
+      }
+
+      // vignette
+      const vignette = this.add.graphics().setDepth(20);
+      vignette.fillStyle(0x000000, 0.18);
+      vignette.fillRect(0,0,W,H);
+      vignette.setBlendMode(Phaser.BlendModes.MULTIPLY);
+
+      // player and follower
+      this.player = this.physics.add.sprite(W/2, H-240, 'bikePurple').setDepth(8);
+      this.player.setCircle(28, 36, 44);
+      this.player.setCollideWorldBounds(true);
+      this.player.setScale(0.78);
+
+      this.follower = this.physics.add.sprite(W/2 - 26, H-150, 'bikeRed').setDepth(7);
+      this.follower.setScale(0.70);
+      this.follower.body.setEnable(false);
+
+      this.leftBound = W/2 - opts.roadHalf;
+      this.rightBound = W/2 + opts.roadHalf;
+
+      // cyclists (MUCHOS)
+      this.cyclists = this.physics.add.group({ allowGravity:false });
+      this.physics.add.overlap(this.player, this.cyclists, () => this.hit(), null, this);
+
+      // steering
+      this.pointerDown = false;
+      this.activePointerId = null;
+      this.targetX = this.player.x;
+      this.input.addPointer(2);
+
+      const onDown = (p) => {
+        if (this.pedalUI && this.pedalUI.contains(p.x, p.y)) return;
+        AudioMgr.unlock();
+        this.pointerDown = true;
+        this.activePointerId = p.id;
+        this.targetX = Phaser.Math.Clamp(p.x, this.leftBound, this.rightBound);
+      };
+      const onMove = (p) => {
+        if (!this.pointerDown) return;
+        if (this.activePointerId !== null && p.id !== this.activePointerId) return;
+        if (this.pedalUI && this.pedalUI.contains(p.x, p.y)) return;
+        this.targetX = Phaser.Math.Clamp(p.x, this.leftBound, this.rightBound);
+      };
+      const onUp = (p) => {
+        if (this.activePointerId !== null && p.id !== this.activePointerId) return;
+        this.pointerDown = false;
+        this.activePointerId = null;
+      };
+      this.input.on('pointerdown', onDown);
+      this.input.on('pointermove', onMove);
+      this.input.on('pointerup', onUp);
+
+      // pedal
+      this._pedal = createPedalModel(this);
+      this._pedal.decayIdle = opts.pedal.decayIdle;
+      this._pedal.decayHold = opts.pedal.decayHold;
+      this._pedal.tapBoost  = opts.pedal.tapBoost;
+      this._pedal.holdBoost = opts.pedal.holdBoost;
+
+      this.pedalUI = buildPedalButton(this, 'PEDALEAR 🚲');
+      this.pedalUI.zone.on('pointerdown', () => {
+        AudioMgr.unlock();
+        this._pedal.pedaling = true;
+        this._pedal.tap();
+        this.pedalUI.punch();
+      });
+      this.pedalUI.zone.on('pointerup', () => { this._pedal.pedaling = false; });
+      this.input.on('pointerup', () => { this._pedal.pedaling = false; });
+
+      // progress and spawn
+      this.dist = 0;
+      this.goal = opts.goal;
+      this.spawnT = 0;
+
+      // overlay start
+      overlay.classList.add('on');
+      ovTitle.textContent = opts.title;
+      ovDesc.innerHTML = opts.desc;
+      ovBtn.textContent = 'EMPEZAR 🚲';
+      ovBtn.onclick = () => {
+        overlay.classList.remove('on');
+        AudioMgr.unlock();
+        if (USE_AUDIO_FILES && opts.loop) AudioMgr.playLoop(opts.loop);
+        G.started = true;
+        toast(this, opts.toastStart, opts.toastColor);
+      };
+
+      uiHint.textContent = opts.hint;
+      syncHUD(opts.stageLabel, opts.stageMsg, 0, 0);
+
+      // pre-spawn a few cyclists to make it busy immediately
+      this.time.delayedCall(450, () => { if (G.started) for(let i=0;i<3;i++) this.spawnCyclist(720, 0.08); });
+    }
+
+    hit(){
+      if (!G.started) return;
+      if (this._hitLock) return;
+      this._hitLock = true;
+      this.time.delayedCall(220, () => this._hitLock = false);
+
+      G.hits++;
+      AudioMgr.sfxHit();
+      this.cameras.main.shake(110, 0.006);
+      toast(this, '¡CICLISTA! 😵', '#fca5a5');
+
+      if (G.hits >= G.maxHits){
+        this.fail('Demasiados golpes…');
+      }
+    }
+
+    fail(reason){
+      G.started = false;
+      if (USE_AUDIO_FILES) AudioMgr.stopAllLoops();
+      overlay.classList.add('on');
+      ovTitle.textContent = '¡Ups! 😅';
+      ovDesc.textContent = `${reason}\nIntenta de nuevo: pedalea y esquiva bicis.`;
+      ovBtn.textContent = 'REINTENTAR';
+      ovBtn.onclick = () => { overlay.classList.remove('on'); this.scene.restart(); };
+    }
+
+    spawnCyclist(speed, prog){
+      const x = Phaser.Math.Between(this.leftBound+20, this.rightBound-20);
+      const c = this.cyclists.create(x, -110, 'cyclist').setDepth(6);
+
+      tintCyclist(c);
+
+      const sc = Phaser.Math.FloatBetween(0.72, 0.92);
+      c.setScale(sc);
+      c.setCircle(24, 24, 24);
+
+      const driftX = Phaser.Math.Between(-120, 120);
+      c.setVelocity(driftX, speed * Phaser.Math.FloatBetween(0.98, 1.22));
+
+      c._zig = Phaser.Math.FloatBetween(1.0, 2.2);
+      c._amp = Phaser.Math.FloatBetween(28, 76) * (0.8 + prog*1.0);
+      c._t = Math.random()*10;
+
+      // a veces "serpentean" más
+      c._bias = (Math.random() < 0.35) ? Phaser.Math.Between(-1, 1) : 0;
+
+      return c;
+    }
+
+    updateRide(dt, opts){
+      if (!G.started) return;
+      const dts = dt/1000;
+
+      this._pedal.update(dt);
+
+      const base = opts.speedBase;
+      const maxBoost = opts.speedBoost;
+      const speed = base + this._pedal.power * maxBoost;
+
+      this.dist += speed * dts * 0.12;
+      const prog = clamp01(this.dist / this.goal);
+
+      this.road.tilePositionY -= speed * dts * opts.roadScroll;
+      this.forestL.tilePositionY -= speed * dts * 0.35;
+      this.forestR.tilePositionY -= speed * dts * 0.35;
+      if (this.sea) this.sea.tilePositionX += speed * dts * 0.10;
+
+      this.trees.getChildren().forEach(t => {
+        t.y += (t._spd + speed*0.12) * dts;
+        if (t.y > H + 120){
+          t.y = -120;
+          t.x = (Math.random()<0.5) ? Phaser.Math.Between(25,150) : Phaser.Math.Between(W-150, W-25);
+          t._spd = Phaser.Math.Between(85, 170);
+          t.setScale(Phaser.Math.FloatBetween(0.80, 1.12));
+        }
+      });
+
+      // night -> day effect for rideToFair only
+      if (this.night){
+        const nightAlpha = clamp01(0.62 - prog*0.62);
+        this.night.setAlpha(nightAlpha);
+
+        const cNight = Phaser.Display.Color.ValueToColor(0x07122a);
+        const cDay   = Phaser.Display.Color.ValueToColor(0x7dd3fc);
+        const c = Phaser.Display.Color.Interpolate.ColorWithColor(cNight, cDay, 1, prog);
+        this.sky.setFillStyle(Phaser.Display.Color.GetColor(c.r, c.g, c.b), 1);
+
+        this.sun.setAlpha(clamp01((prog - 0.35) * 1.6));
+        this.sun.y = 220 - prog*90;
+      }
+
+      if (this.sun && !this.night){
+        this.sun.y = 160 + Math.sin(this.time.now*0.0012)*1.5;
+        if (this.sunGlow) this.sunGlow.alpha = 0.16 + Math.sin(this.time.now*0.001)*0.02;
+      }
+
+      // steering
+      this.player.x += (this.targetX - this.player.x) * 0.20;
+      this.player.x = Phaser.Math.Clamp(this.player.x, this.leftBound, this.rightBound);
+
+      const fx = this.player.x - 26;
+      const fy = this.player.y + 95;
+      this.follower.x += (fx - this.follower.x) * 0.10;
+      this.follower.y += (fy - this.follower.y) * 0.10;
+
+      // MUCHAS bicis: spawn más seguido + doble/triple
+      this.spawnT += dts;
+      const every = Phaser.Math.Linear(opts.spawnEveryStart, opts.spawnEveryEnd, prog);
+      if (this.spawnT >= every){
+        this.spawnT = 0;
+
+        const mainCount = 1 + (Math.random() < (0.55 + prog*0.25) ? 1 : 0); // 1-2 casi siempre
+        for (let i=0;i<mainCount;i++){
+          this.spawnCyclist(speed*opts.cyclistSpeedMul, prog);
+        }
+        // chance extra (a veces 3)
+        if (Math.random() < (0.22 + prog*0.35)){
+          this.spawnCyclist(speed*(opts.cyclistSpeedMul*0.98), prog);
+        }
+      }
+
+      // update cyclists
+      this.cyclists.getChildren().forEach(cy => {
+        if (!cy.active) return;
+        cy._t += dts * cy._zig;
+        cy.x += (Math.sin(cy._t) + cy._bias*0.6) * cy._amp * dts;
+        cy.x = Phaser.Math.Clamp(cy.x, this.leftBound+12, this.rightBound-12);
+        if (cy.y > H + 160) cy.destroy();
+      });
+
+      // HUD
+      syncHUD(opts.stageLabelFn(prog), opts.stageMsgFn(prog), prog, this._pedal.power);
+
+      // finish
+      if (prog >= 1){
+        if (USE_AUDIO_FILES) AudioMgr.stopAllLoops();
+        opts.onFinish();
+      }
+    }
+  }
+
+  class RideToFairScene extends RideBaseScene {
+    constructor(){ super('RideToFair'); }
+    create(){
+      this.setupRide({
+        resetHits: true,
+        skyColor: 0x07122a,
+        roadW: 380,
+        roadHalf: 175,
+        treeAlpha: 0.65,
+        stars: true,
+        sun: false,
+        seaHint: false,
+        nightOverlay: true,
+        pedal: { decayIdle: 0.56, decayHold: 0.30, tapBoost: 0.23, holdBoost: 0.052 },
+        goal: 1500,
+        speedBase: 520,
+        speedBoost: 560,
+        roadScroll: 0.95,
+        cyclistSpeedMul: 1.12,
+        spawnEveryStart: 0.52,
+        spawnEveryEnd: 0.23,
+        title: 'Lo Vásquez',
+        desc: 'Manejas la bici <b>morada</b> (Valeria). Lucas va en la <b>roja</b> contigo.<br>Tap-tap “PEDALEAR” para acelerar y esquiva <b>muchas bicis</b>.',
+        loop: 'night',
+        toastStart: 'NOCHE EN BICI ✨',
+        toastColor: '#a7f3d0',
+        hint: 'Arrastra para dirigir · Tap-tap “PEDALEAR” acelera · Muchas bicis 😅',
+        stageLabel: 'Noche 🚲',
+        stageMsg: 'Pedalea… la noche se vuelve día.',
+        stageLabelFn: (p)=> p<0.34?'Noche 🚲':(p<0.72?'Amanecer 🌅':'Día ☀️'),
+        stageMsgFn: (p)=> p<0.72?'Sigue… ya está aclarando…':'¡Se ve Lo Vásquez adelante!',
+        onFinish: () => {
+          toast(this, '¡FERIA! 🟦', '#60a5fa');
+          this.scene.start('FairMaze');
+        }
+      });
+    }
+    update(_, dt){ this.updateRide(dt, this.opts); }
+  }
+
+  class FairMazeScene extends Phaser.Scene {
+    constructor(){ super('FairMaze'); }
+    create(){
+      if (USE_AUDIO_FILES) AudioMgr.playLoop('fair');
+
+      uiHint.textContent = 'Arrastra para moverte · Gente por todos lados (no colisiona) · Encuentra la SALIDA';
+      syncHUD('Feria 🟦', 'Toldos por todos lados… ¡encuentra la salida!', 0, 0);
+
+      // Background daylight sand-ish
+      this.add.rectangle(W/2, H/2, W, H, 0xfff3cf, 1);
+
+      // Maze area
+      const MA = { x: 46, y: 180, w: 708, h: 920 };
+
+      // Frame
+      const frame = this.add.graphics().setDepth(2);
+      frame.lineStyle(6, 0x0b1220, 0.10);
+      frame.strokeRoundedRect(MA.x, MA.y, MA.w, MA.h, 24);
+      frame.lineStyle(3, 0x38bdf8, 0.22);
+      frame.strokeRoundedRect(MA.x, MA.y, MA.w, MA.h, 24);
+
+      // Physics bounds
+      this.physics.world.setBounds(MA.x, MA.y, MA.w, MA.h);
+
+      // Better maze density
+      const colsOdd = 21; // más denso y “bien hecho”
+      const rowsOdd = 27;
+      const { grid, start, exit, cols, rows } = generatePerfectMaze(colsOdd, rowsOdd);
+
+      const cellW = MA.w / cols;
+      const cellH = MA.h / rows;
+
+      // Walls = toldos
+      this.walls = this.physics.add.staticGroup();
+
+      // Build walls on wall cells
+      for (let r=0;r<rows;r++){
+        for (let c=0;c<cols;c++){
+          if (grid[r][c] === 1) continue; // path
+
+          const cx = MA.x + c*cellW + cellW/2;
+          const cy = MA.y + r*cellH + cellH/2;
+
+          const t = this.add.image(cx, cy, 'toldo').setDepth(6);
+
+          // scale to cell
+          const sc = Math.min((cellW*1.10)/64, (cellH*1.10)/64);
+          t.setScale(sc);
+
+          this.walls.add(t);
+          // body size (tight) so corridors feel clean
+          t.body.setSize(52, 52, true);
+          t.body.updateFromGameObject();
+        }
+      }
+
+      // Start / Exit
+      const startX = MA.x + start.c*cellW + cellW/2;
+      const startY = MA.y + start.r*cellH + cellH/2;
+      const exitX  = MA.x + exit.c*cellW + cellW/2;
+      const exitY  = MA.y + exit.r*cellH + cellH/2;
+
+      // Exit zone
+      this.exitZone = this.add.zone(exitX, exitY, cellW*1.35, cellH*1.35).setDepth(7);
+      this.physics.add.existing(this.exitZone, true);
+
+      // Exit marker
+      const exitG = this.add.graphics().setDepth(7);
+      exitG.fillStyle(0x22c55e, 0.16);
+      exitG.fillRoundedRect(exitX - cellW*0.62, exitY - cellH*0.62, cellW*1.24, cellH*1.24, 22);
+      exitG.lineStyle(6, 0x22c55e, 0.60);
+      exitG.strokeRoundedRect(exitX - cellW*0.62, exitY - cellH*0.62, cellW*1.24, cellH*1.24, 22);
+      this.add.text(exitX, exitY - cellH*0.90, 'SALIDA', {
+        fontSize:'18px', fontStyle:'1000', color:'#14532d',
+        stroke:'#ffffff', strokeThickness: 6
+      }).setOrigin(0.5).setDepth(8);
+
+      // Player (Valeria purple) + Lucas follower
+      this.player = this.physics.add.sprite(startX, startY, 'bikePurple').setDepth(12);
+      this.player.setScale(0.56);
+      this.player.setCircle(28, 36, 44);
+      this.player.setCollideWorldBounds(true);
+      this.player.setDamping(true);
+      this.player.setDrag(0.0001);
+
+      this.follower = this.add.sprite(startX - 26, startY + 74, 'bikeRed').setDepth(11);
+      this.follower.setScale(0.50);
+
+      // Collision ONLY with walls
+      this.physics.add.collider(this.player, this.walls);
+      this.physics.add.overlap(this.player, this.exitZone, () => this.escape(), null, this);
+
+      // ========= GENTE por todos lados (NO colisiona)
+      // MUCHOS sprites + movimiento + cruces visuales
+      this.people = this.add.group();
+      const crowdCount = 78; // denso pero razonable en Android
+      const candidates = [];
+      for (let r=1;r<rows-1;r++){
+        for (let c=1;c<cols-1;c++){
+          if (grid[r][c] !== 1) continue;
+          const ds = Math.abs(c-start.c) + Math.abs(r-start.r);
+          const de = Math.abs(c-exit.c)  + Math.abs(r-exit.r);
+          if (ds < 3 || de < 3) continue;
+          candidates.push({c,r});
+        }
+      }
+
+      // place people in random path cells
+      for (let i=0;i<crowdCount && candidates.length;i++){
+        const idx = Phaser.Math.Between(0, candidates.length-1);
+        const cell = candidates.splice(idx,1)[0];
+
+        const px = MA.x + cell.c*cellW + cellW/2 + Phaser.Math.Between(-Math.floor(cellW*0.25), Math.floor(cellW*0.25));
+        const py = MA.y + cell.r*cellH + cellH/2 + Phaser.Math.Between(-Math.floor(cellH*0.25), Math.floor(cellH*0.25));
+
+        const p = this.add.sprite(px, py, 'person').setDepth(10);
+        p.setScale(Phaser.Math.FloatBetween(0.68, 0.95));
+        p.setTint(Phaser.Display.Color.GetColor(
+          Phaser.Math.Between(170,255),
+          Phaser.Math.Between(170,255),
+          Phaser.Math.Between(170,255)
+        ));
+        p.alpha = 0.72;
+
+        // wander
+        p._homeX = px; p._homeY = py;
+        p._t = Math.random()*10;
+        p._spd = Phaser.Math.FloatBetween(0.9, 1.6);
+        p._ax = Phaser.Math.FloatBetween(10, 26);
+        p._ay = Phaser.Math.FloatBetween(10, 26);
+
+        this.people.add(p);
+      }
+
+      // Input: drag to move
+      this.pointerDown = false;
+      this.activePointerId = null;
+      this.target = new Phaser.Math.Vector2(this.player.x, this.player.y);
+      this.input.addPointer(2);
+
+      this.input.on('pointerdown', (p) => {
+        AudioMgr.unlock();
+        this.pointerDown = true;
+        this.activePointerId = p.id;
+        this.target.set(
+          Phaser.Math.Clamp(p.x, MA.x+10, MA.x+MA.w-10),
+          Phaser.Math.Clamp(p.y, MA.y+10, MA.y+MA.h-10)
+        );
+      });
+
+      this.input.on('pointermove', (p) => {
+        if (!this.pointerDown) return;
+        if (this.activePointerId !== null && p.id !== this.activePointerId) return;
+        this.target.set(
+          Phaser.Math.Clamp(p.x, MA.x+10, MA.x+MA.w-10),
+          Phaser.Math.Clamp(p.y, MA.y+10, MA.y+MA.h-10)
+        );
+      });
+
+      this.input.on('pointerup', (p) => {
+        if (this.activePointerId !== null && p.id !== this.activePointerId) return;
+        this.pointerDown = false;
+        this.activePointerId = null;
+      });
+
+      // progress: distance to exit
+      this._maxDist = Phaser.Math.Distance.Between(startX, startY, exitX, exitY);
+      this._exitX = exitX; this._exitY = exitY;
+
+      toast(this, 'FERIA LO VÁSQUEZ 🟦', '#60a5fa');
+    }
+
+    escape(){
+      if (this._escapeLock) return;
+      this._escapeLock = true;
+      if (USE_AUDIO_FILES) AudioMgr.stopAllLoops();
+      toast(this, '¡SALIMOS! ✅', '#a7f3d0');
+      this.time.delayedCall(650, () => this.scene.start('RideToValpo'));
+    }
+
+    update(_, dt){
+      const dts = dt/1000;
+
+      // player movement (smooth)
+      const vx = (this.target.x - this.player.x);
+      const vy = (this.target.y - this.player.y);
+      const len = Math.hypot(vx, vy);
+      const maxSp = 360;
+      const k = len > 0 ? Math.min(1, maxSp/len) : 0;
+
+      this.player.setVelocity(vx*k*2.25, vy*k*2.25);
+
+      // follower
+      const fx = this.player.x - 22;
+      const fy = this.player.y + 70;
+      this.follower.x += (fx - this.follower.x) * 0.12;
+      this.follower.y += (fy - this.follower.y) * 0.12;
+
+      // people wander (NO colisionan, solo molestan visual)
+      this.people.getChildren().forEach(p => {
+        p._t += dts * p._spd;
+        const nx = p._homeX + Math.sin(p._t*1.2) * p._ax;
+        const ny = p._homeY + Math.cos(p._t*1.0) * p._ay;
+        p.x += (nx - p.x) * 0.06;
+        p.y += (ny - p.y) * 0.06;
+
+        // “se cruzan”: cambio leve de profundidad para sensación de multitudes
+        p.depth = (p.y < this.player.y) ? 9 : 13;
+      });
+
+      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, this._exitX, this._exitY);
+      const bar01 = clamp01(1 - dist/this._maxDist);
+      syncHUD('Feria 🟦', 'Toldos azules + gente por todos lados… encuentra la SALIDA', bar01, 0);
+    }
+  }
+
+  class RideToValpoScene extends RideBaseScene {
+    constructor(){ super('RideToValpo'); }
+    create(){
+      this.setupRide({
+        resetHits: false,
+        skyColor: 0x7dd3fc,
+        roadW: 420,
+        roadHalf: 185,
+        treeAlpha: 0.78,
+        stars: false,
+        sun: true,
+        sunAlpha: 0.95,
+        sunGlowAlpha: 0.16,
+        seaHint: true,
+        nightOverlay: false,
+        pedal: { decayIdle: 0.62, decayHold: 0.34, tapBoost: 0.20, holdBoost: 0.045 },
+        goal: 1750,
+        speedBase: 560,
+        speedBoost: 620,
+        roadScroll: 0.98,
+        cyclistSpeedMul: 1.16,
+        spawnEveryStart: 0.44,
+        spawnEveryEnd: 0.20,
+        title: 'Rumbo a Valpo',
+        desc: 'Ahora es <b>de día</b> ☀️. Pedalea fuerte y esquiva <b>muchas bicis</b> para llegar a la playa.',
+        loop: 'sea',
+        toastStart: 'RUMBO A VALPO ☀️',
+        toastColor: '#a7f3d0',
+        hint: 'Valpo de día ☀️ · Tap-tap “PEDALEAR” y esquiva MUCHA gente en bici',
+        stageLabel: 'Ruta ☀️',
+        stageMsg: 'De día y soleado… rumbo a Valpo.',
+        stageLabelFn: (p)=> p<0.6?'Ruta ☀️':'Valpo 🌊',
+        stageMsgFn: (p)=> p<0.55?'Pedaleando… ya se siente Valpo.':(p<0.9?'¡Valpo cerca! Sigue…':'Llegamos…'),
+        onFinish: () => {
+          // ✅ al tiro pantalla playa
+          this.scene.start('BeachFinal');
+        }
+      });
+    }
+    update(_, dt){ this.updateRide(dt, this.opts); }
+  }
+
+  class BeachFinalScene extends Phaser.Scene {
+    constructor(){ super('BeachFinal'); }
+    create(){
+      // Sky
+      this.add.rectangle(W/2, H/2, W, H, 0x7dd3fc, 1).setDepth(0);
+
+      // Sun + glow
+      const sun = this.add.circle(W-140, 170, 78, 0xfde68a, 0.96).setDepth(1);
+      const glow = this.add.circle(W-140, 170, 150, 0xfde68a, 0.18).setDepth(1);
+
+      // Sea
+      const sea = this.add.tileSprite(W/2, 420, W, 560, 'sea').setAlpha(0.98).setDepth(2);
+
+      // Foam
+      const foam = this.add.graphics().setDepth(3);
+      foam.fillStyle(0xffffff, 0.22);
+      for (let i=0;i<30;i++){
+        foam.fillEllipse(30 + i*28, 590 + ((i%2)*10), 58, 16);
+      }
+
+      // Sand foreground
+      const sand = this.add.graphics().setDepth(8);
+      sand.fillStyle(0xfef3c7, 1);
+      sand.fillRoundedRect(0, 660, W, 540, 28);
+      sand.fillStyle(0x0b1220, 0.10);
+      sand.fillRoundedRect(0, 660, W, 90, 28);
+
+      // Couple
+      const couple = this.add.image(W/2, 760, 'couple').setDepth(10).setAlpha(0.98);
+      couple.setScale(1.10);
+
+      this.tweens.add({
+        targets: couple,
+        y: '+=6',
+        duration: 1300,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.inOut'
+      });
+
+      // Title
+      this.add.text(W/2, 210, 'Llegamos a la playa 🌊', {
+        fontSize: '62px',
+        fontStyle: '1000',
+        color: '#ffffff',
+        stroke: '#000000',
+        strokeThickness: 10
+      }).setOrigin(0.5).setDepth(12);
+
+      this.add.text(W/2, 300, 'Lucas & Valeria\nmirando el mar ✨', {
+        fontSize: '34px',
+        fontStyle: '950',
+        color: '#ffffff',
+        stroke: '#000000',
+        strokeThickness: 8,
+        align: 'center'
+      }).setOrigin(0.5).setDepth(12).setAlpha(0.92);
+
+      // Vignette
+      const vignette = this.add.graphics().setDepth(20);
+      vignette.fillStyle(0x000000, 0.16);
+      vignette.fillRect(0,0,W,H);
+      vignette.setBlendMode(Phaser.BlendModes.MULTIPLY);
+
+      uiHint.textContent = '✅ Completado: Lo Vásquez → Feria → Valpo → Playa';
+      syncHUD('Final ✅', 'Llegamos… y todo se siente tranquilo.', 1, 0);
+
+      // overlay instant
+      overlay.classList.add('on');
+      localStorage.setItem('bm_done_vasquez', '1');
+      ovTitle.textContent = '¡Nivel completado! 🏁';
+      ovDesc.textContent = 'Noche → Día → Feria (laberinto) → Ruta → Playa.\n¿Volver al menú?';
+      ovBtn.textContent = 'VOLVER AL MENÚ';
+      ovBtn.onclick = () => {
+        overlay.classList.remove('on');
+        window.location.href = 'index.html';
+      };
+    }
+
+    update(){
+      // tiny sea motion
+      // (kept simple; tileSprite anim could be added if you want)
+    }
+  }
+
+  // ==========================
+  // START
+  // ==========================
+  const config = {
+    type: Phaser.AUTO,
+    scale: { mode: Phaser.Scale.FIT, parent: document.body, autoCenter: Phaser.Scale.CENTER_BOTH, width: W, height: H },
+    physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
+    scene: [BootScene, RideToFairScene, FairMazeScene, RideToValpoScene, BeachFinalScene]
+  };
+
+  new Phaser.Game(config);
+  syncHUD('—', '—', 0, 0);
+})();
+</script>
+
+</body>
+</html>
