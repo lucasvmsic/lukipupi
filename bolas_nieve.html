@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Snow Battle: Revenge</title>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+  <style>
+    :root { color-scheme: dark; }
+    html, body {
+      margin: 0; height: 100%;
+      background: radial-gradient(1200px 1200px at 50% 18%, #0b2a4d 0%, #05070c 55%, #03040a 100%);
+      overflow: hidden;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    #phaser-root { position: fixed; inset: 0; z-index: 1; }
+    canvas { display:block; }
+
+    /* HUD minimal pro */
+    .hud {
+      position: fixed;
+      left: 0; right: 0;
+      top: env(safe-area-inset-top, 0);
+      padding: 12px 12px 10px;
+      pointer-events: none;
+      user-select: none;
+      z-index: 10;
+    }
+    .hudInner {
+      max-width: 980px;
+      margin: 0 auto;
+      display: flex;
+      gap: 10px;
+      align-items: stretch;
+      justify-content: space-between;
+    }
+    .chip {
+      flex: 0 0 auto;
+      padding: 10px 12px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.16);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 14px 40px rgba(0,0,0,0.30);
+      color: #fff;
+      min-width: 150px;
+    }
+    .label {
+      font-size: 10px;
+      letter-spacing: .14em;
+      opacity: .85;
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .valueRow{
+      margin-top: 2px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .value {
+      font-size: 20px;
+      font-weight: 1000;
+      letter-spacing: .2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #fff;
+      line-height: 1.05;
+    }
+    .sub {
+      font-size: 12px;
+      font-weight: 900;
+      opacity: .9;
+      line-height: 1.1;
+      white-space: nowrap;
+    }
+
+    /* progreso puntos (0..200) */
+    .barWrap {
+      max-width: 980px;
+      margin: 10px auto 0;
+      padding: 0 2px;
+    }
+    .barOuter {
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.16);
+      overflow: hidden;
+      box-shadow: 0 14px 40px rgba(0,0,0,0.28);
+    }
+    .barInner {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(56,189,248,0.95), rgba(34,197,94,0.95), rgba(99,102,241,0.95));
+      transition: width 120ms linear;
+    }
+
+    .hint {
+      position: fixed;
+      left: 0; right: 0;
+      bottom: calc(env(safe-area-inset-bottom, 0) + 10px);
+      text-align:center;
+      color: rgba(255,255,255,0.86);
+      font-weight: 850;
+      letter-spacing: .15px;
+      font-size: 12px;
+      text-shadow: 0 12px 28px rgba(0,0,0,0.45);
+      pointer-events:none;
+      padding: 0 12px;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="phaser-root"></div>
+
+  <!-- HUD: SOLO PUNTOS + FALLOS -->
+  <div class="hud">
+    <div class="hudInner">
+      <div class="chip">
+        <div class="label">Puntos</div>
+        <div class="valueRow">
+          <div class="value" id="uiScore">0</div>
+          <div class="sub" id="uiScoreMax">/200</div>
+        </div>
+      </div>
+
+      <div class="chip">
+        <div class="label">Fallos</div>
+        <div class="valueRow">
+          <div class="value" id="uiMiss">0</div>
+          <div class="sub" id="uiMissMax">/5</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="barWrap">
+      <div class="barOuter"><div class="barInner" id="uiBar"></div></div>
+    </div>
+  </div>
+
+  <div class="hint">Toca para lanzar ❄️ — Evita fallar (máx. 5).</div>
+
+<script>
+const config = {
+  type: Phaser.AUTO,
+  scale: {
+    mode: Phaser.Scale.FIT,
+    parent: 'phaser-root',
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    width: 800,
+    height: 1200
+  },
+  physics: { default: 'arcade', arcade: { debug: false } },
+  scene: { preload, create, update }
+};
+
+new Phaser.Game(config);
+
+let state, target, dog, particles, emitter, spawnTimer;
+let bgm, sfxHit, sfxBad, sfxThrow;
+
+const uiScore = () => document.getElementById('uiScore');
+const uiMiss  = () => document.getElementById('uiMiss');
+const uiBar   = () => document.getElementById('uiBar');
+
+const SCORE_GOAL = 200;
+const MAX_MISSES = 5;
+
+function preload() {
+  this.load.on('loaderror', (file) => {
+    console.warn('Asset no cargó:', file && file.key, file && file.src);
+  });
+
+  this.load.image('fondo', 'fondonieve.jpg');
+  this.load.image('novio', 'novio.png');
+  this.load.image('perro', 'perro.png');
+  this.load.image('bola', 'bola.png');
+  this.load.image('jijija_img', 'jijijija.png');
+
+  this.load.image('snow', 'https://labs.phaser.io/assets/particles/white.png');
+
+  this.load.audio('bgm', 'https://labs.phaser.io/assets/audio/tech/tech.mp3');
+  this.load.audio('sfx_hit', 'https://labs.phaser.io/assets/audio/SoundEffects/p-ping.mp3');
+  this.load.audio('sfx_bad', 'https://labs.phaser.io/assets/audio/SoundEffects/shoot1.wav');
+  this.load.audio('sfx_throw', 'https://labs.phaser.io/assets/audio/SoundEffects/blaster.mp3');
+
+  this.load.audio('jijija_snd', 'jijijija.mp3');
+}
+
+function create() {
+  state = {
+    score: 0,
+    misses: 0,
+    isPlaying: true,
+    audioUnlocked: false,
+    spawnedEver: false
+  };
+
+  const W = 800, H = 1200;
+
+  // Fondo
+  if (this.textures.exists('fondo') && this.textures.get('fondo').key !== '__MISSING') {
+    this.add.image(W/2, H/2, 'fondo').setDisplaySize(W, H).setDepth(0);
+  } else {
+    this.add.rectangle(W/2, H/2, W, H, 0x0b1220).setDepth(0);
+  }
+
+  // Vignette suave
+  const vign = this.add.graphics().setDepth(1);
+  vign.fillStyle(0x000000, 0.18);
+  vign.fillRect(0, 0, W, H);
+
+  ensureSnowTexture(this);
+
+  // Nieve ambiental
+  particles = this.add.particles('snow').setDepth(2);
+  particles.createEmitter({
+    x: { min: -50, max: W + 50 },
+    y: -20,
+    lifespan: { min: 2400, max: 3800 },
+    speedY: { min: 120, max: 240 },
+    speedX: { min: -35, max: 35 },
+    scale: { start: 0.22, end: 0.06 },
+    alpha: { start: 0.55, end: 0.0 },
+    quantity: 2,
+    frequency: 18
+  });
+
+  // Partículas impacto
+  emitter = particles.createEmitter({
+    speed: { min: 120, max: 520 },
+    scale: { start: 0.45, end: 0 },
+    alpha: { start: 1, end: 0 },
+    lifespan: 650,
+    on: false
+  });
+
+  // Personajes (sin physics: estable)
+  target = crearSpriteSeguro(this, 'novio', 180, 0x22c55e).setDepth(6);
+  dog    = crearSpriteSeguro(this, 'perro', 200, 0xef4444).setDepth(6);
+  addShadow(this, target);
+  addShadow(this, dog);
+
+  // Audio (best-effort)
+  this.sound.pauseOnBlur = false;
+  bgm      = safeSoundAdd(this, 'bgm',      { loop: true, volume: 0.33 });
+  sfxHit   = safeSoundAdd(this, 'sfx_hit',  { volume: 0.55 });
+  sfxBad   = safeSoundAdd(this, 'sfx_bad',  { volume: 0.35 });
+  sfxThrow = safeSoundAdd(this, 'sfx_throw',{ volume: 0.22 });
+  this.jijijaSound = safeSoundAdd(this, 'jijija_snd', { volume: 0.9 });
+
+  syncUI();
+
+  // Cámara
+  this.cameras.main.fadeIn(260, 0, 0, 0);
+
+  // Spawn inicial inmediato
+  spawnManager.call(this, true);
+
+  // Spawn timer
+  spawnTimer = this.time.addEvent({
+    delay: 1100,
+    callback: spawnManager,
+    callbackScope: this,
+    loop: true
+  });
+
+  // Failsafe
+  this.time.delayedCall(900, () => {
+    if (state.isPlaying && !state.spawnedEver) spawnManager.call(this, true);
+  });
+
+  // Controles
+  this.input.on('pointerdown', (pointer) => {
+    if (!state.audioUnlocked) {
+      state.audioUnlocked = true;
+      safePlay(bgm);
+    }
+    if (!state.isPlaying) return;
+    lanzarBola(this, pointer.worldX, pointer.worldY);
+  });
+}
+
+/* ---------- Robustez ---------- */
+
+function safeSoundAdd(scene, key, cfg) {
+  try {
+    if (scene.cache.audio && scene.cache.audio.exists(key)) return scene.sound.add(key, cfg || {});
+  } catch(e) {}
+  return null;
+}
+function safePlay(sound) {
+  try { if (sound && !sound.isPlaying) sound.play(); } catch(e) {}
+}
+
+function ensureSnowTexture(scene) {
+  const ok = scene.textures.exists('snow') && scene.textures.get('snow').key !== '__MISSING';
+  if (ok) return;
+  const g = scene.add.graphics();
+  g.fillStyle(0xffffff, 1);
+  g.fillCircle(8, 8, 8);
+  g.generateTexture('snow', 16, 16);
+  g.destroy();
+}
+
+function crearSpriteSeguro(scene, key, desiredWidth, colorFallback) {
+  let s = scene.add.sprite(-500, -500, key).setInteractive();
+
+  const tex = scene.textures.get(key);
+  const missing = (!scene.textures.exists(key)) || (!tex) || (tex.key === '__MISSING');
+  if (missing) {
+    const g = scene.add.graphics();
+    g.fillStyle(colorFallback, 1);
+    g.fillRoundedRect(0, 0, 180, 180, 34);
+    g.lineStyle(8, 0xffffff, 0.25);
+    g.strokeRoundedRect(6, 6, 168, 168, 28);
+    g.generateTexture(key + '_f', 180, 180);
+    g.destroy();
+    s.setTexture(key + '_f');
+  }
+
+  const base = getBaseWidth(s);
+  s.targetScale = desiredWidth / base;
+
+  s.setScale(s.targetScale);
+  s.onStage = false;
+  s.setAlpha(0);
+  s.setVisible(false);
+
+  return s;
+}
+
+function getBaseWidth(sprite) {
+  try {
+    const img = sprite.texture && sprite.texture.getSourceImage ? sprite.texture.getSourceImage() : null;
+    if (img && img.width) return img.width;
+  } catch(e) {}
+  return 180;
+}
+
+function addShadow(scene, sprite) {
+  const sh = scene.add.ellipse(sprite.x, sprite.y + 78, 165, 34, 0x000000, 0.22).setDepth(sprite.depth - 1);
+  sh.setBlendMode(Phaser.BlendModes.MULTIPLY);
+  sprite.shadow = sh;
+  moveShadow(sprite);
+}
+function moveShadow(sprite) {
+  if (!sprite.shadow) return;
+  sprite.shadow.x = sprite.x;
+  sprite.shadow.y = sprite.y + 78;
+  sprite.shadow.alpha = (sprite.visible ? sprite.alpha : 0) * 0.22;
+}
+
+/* ---------- HUD ---------- */
+
+function syncUI() {
+  uiScore().textContent = String(state.score);
+  uiMiss().textContent  = String(state.misses);
+  const prog = Math.max(0, Math.min(1, state.score / SCORE_GOAL));
+  uiBar().style.width = (prog * 100).toFixed(1) + '%';
+}
+
+/* ---------- Spawns ---------- */
+
+function spawnManager(force = false) {
+  if (!state.isPlaying) return;
+
+  // un poco más rápido cuando sube el puntaje, sin volverse loco
+  const baseDelay = 1050;
+  const harder = Math.min(380, Math.floor(state.score * 0.9));
+  if (spawnTimer) spawnTimer.delay = Math.max(650, baseDelay - harder);
+
+  const order = (Math.random() > 0.42) ? [target, dog] : [dog, target];
+
+  let spawned = false;
+  for (const item of order) {
+    if (!item.onStage) {
+      spawnItem(this, item);
+      spawned = true;
+      break;
+    }
+  }
+
+  if (!spawned && force) spawnItem(this, order[0], true);
+}
+
+function spawnItem(scene, item, reposition=false) {
+  state.spawnedEver = true;
+
+  if (!reposition) item.onStage = true;
+
+  item.setPosition(Phaser.Math.Between(160, 640), Phaser.Math.Between(320, 900));
+  item.setVisible(true);
+  item.setAlpha(1);
+  item.setScale(0);
+
+  scene.tweens.add({
+    targets: item,
+    scale: item.targetScale,
+    duration: 280,
+    ease: 'Back.out'
+  });
+
+  scene.tweens.add({
+    targets: item,
+    angle: { from: -2.5, to: 2.5 },
+    duration: 420,
+    yoyo: true,
+    repeat: 1,
+    ease: 'Sine.inOut'
+  });
+
+  // desaparecer si no le pegan
+  scene.time.delayedCall(1500, () => {
+    if (!state.isPlaying) return;
+    if (item.onStage && item.visible && item.alpha > 0.5) {
+      scene.tweens.add({
+        targets: item,
+        alpha: 0,
+        duration: 180,
+        onComplete: () => {
+          item.setVisible(false);
+          item.onStage = false;
+          item.setAngle(0);
+        }
+      });
+    }
+  });
+}
+
+/* ---------- Bola / Impactos ---------- */
+
+function lanzarBola(scene, x, y) {
+  safePlay(sfxThrow);
+
+  const bola = scene.physics.add.sprite(400, 1120, 'bola');
+  bola.setDisplaySize(44, 44).setDepth(5);
+  bola.hasHit = false;
+
+  scene.physics.moveTo(bola, x, y, 1700);
+
+  // tick manual (estable con sprites sin physics)
+  const tick = scene.time.addEvent({
+    delay: 16,
+    loop: true,
+    callback: () => {
+      if (!bola.active) return cleanup();
+
+      // fuera
+      if (!bola.hasHit && (bola.y < -60 || bola.x < -60 || bola.x > 860 || bola.y > 1260)) {
+        bola.hasHit = true;
+        bola.destroy();
+        registrarFallo(scene);
+        return cleanup();
+      }
+
+      // hits
+      if (!bola.hasHit) {
+        if (isVisibleHit(bola, target, 85)) return hit(scene, bola, target, true, cleanup);
+        if (isVisibleHit(bola, dog,    90)) return hit(scene, bola, dog, false, cleanup);
+      }
+    }
+  });
+
+  function cleanup() {
+    try { tick && tick.remove(false); } catch(e) {}
+  }
+}
+
+function isVisibleHit(bola, obj, r) {
+  if (!obj || !obj.visible || obj.alpha < 0.5) return false;
+  const dx = bola.x - obj.x;
+  const dy = bola.y - obj.y;
+  return (dx*dx + dy*dy) <= (r*r);
+}
+
+function hit(scene, bola, obj, esAcierto, cleanup) {
+  if (!state.isPlaying) return;
+  bola.hasHit = true;
+  bola.destroy();
+  cleanup();
+
+  emitter.explode(28, obj.x, obj.y);
+  scene.cameras.main.flash(70, 255, 255, 255);
+
+  safePlay(esAcierto ? sfxHit : sfxBad);
+
+  scene.tweens.add({
+    targets: obj,
+    scale: obj.targetScale * 1.08,
+    duration: 90,
+    yoyo: true,
+    ease: 'Sine.inOut'
+  });
+
+  obj.setAlpha(0);
+  obj.setVisible(false);
+  obj.onStage = false;
+
+  if (esAcierto) {
+    state.score = Math.min(SCORE_GOAL, state.score + 10);
+    syncUI();
+    if (state.score >= SCORE_GOAL) ganar(scene);
+  } else {
+    // castigo leve sin tocar el HUD de balas (ya no existe)
+    state.score = Math.max(0, state.score - 30);
+    syncUI();
+    scene.cameras.main.shake(160, 0.008);
+  }
+}
+
+function registrarFallo(scene) {
+  if (!state.isPlaying) return;
+  state.misses++;
+  syncUI();
+  if (state.misses >= MAX_MISSES) activarJijijaMode(scene);
+}
+
+/* ---------- Game Over / Win ---------- */
+
+function activarJijijaMode(scene) {
+  state.isPlaying = false;
+  scene.physics.pause();
+  if (spawnTimer) spawnTimer.remove(false);
+
+  try {
+    if (bgm && bgm.isPlaying) {
+      scene.tweens.add({
+        targets: bgm, volume: 0, duration: 450,
+        onComplete: () => { try { bgm.stop(); } catch(e) {} }
+      });
+    }
+  } catch(e) {}
+
+  safePlay(scene.jijijaSound);
+
+  scene.add.rectangle(400, 600, 800, 1200, 0x000000, 0.78).setDepth(30);
+
+  if (scene.textures.exists('jijija_img') && scene.textures.get('jijija_img').key !== '__MISSING') {
+    const king = scene.add.image(400, 470, 'jijija_img').setDepth(31).setDisplaySize(460, 460);
+    scene.tweens.add({ targets: king, scale: 1.06, duration: 120, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+  }
+
+  scene.add.text(400, 760, "¡PERDISTE! ❌", {
+    fontSize: '86px',
+    align: 'center',
+    fill: '#fb7185',
+    fontStyle: '900',
+    stroke: '#000',
+    strokeThickness: 10
+  }).setOrigin(0.5).setDepth(32);
+
+  scene.add.text(400, 850, "Te quedaste sin intentos.", {
+    fontSize: '34px',
+    align: 'center',
+    fill: '#fff',
+    fontStyle: '900',
+    stroke: '#000',
+    strokeThickness: 6
+  }).setOrigin(0.5).setDepth(32);
+
+  const btnBg = scene.add.rectangle(400, 980, 480, 110, 0xffffff, 1).setDepth(33).setInteractive();
+  btnBg.setStrokeStyle(6, 0x93c5fd, 1);
+
+  const btnText = scene.add.text(400, 980, "REINTENTAR", {
+    fontSize: '44px',
+    fill: '#0b1220',
+    fontStyle: '900'
+  }).setOrigin(0.5).setDepth(34);
+
+  btnBg.on('pointerdown', () => {
+    scene.tweens.add({ targets: [btnBg, btnText], scale: 0.98, duration: 70, yoyo: true });
+    scene.time.delayedCall(90, () => scene.scene.restart());
+  });
+}
+
+function ganar(scene) {
+  state.isPlaying = false;
+  scene.physics.pause();
+  if (spawnTimer) spawnTimer.remove(false);
+
+  try {
+    if (bgm && bgm.isPlaying) {
+      scene.tweens.add({
+        targets: bgm, volume: 0, duration: 450,
+        onComplete: () => { try { bgm.stop(); } catch(e) {} }
+      });
+    }
+  } catch(e) {}
+
+  scene.add.rectangle(400, 600, 800, 1200, 0x000000, 0.72).setDepth(30);
+  localStorage.setItem('bm_done_nieve', '1');
+
+  scene.add.text(400, 560, "¡GANASTE! ✅", {
+    fontSize: '92px',
+    align: 'center',
+    fill: '#a7f3d0',
+    fontStyle: '900',
+    stroke: '#000',
+    strokeThickness: 10
+  }).setOrigin(0.5).setDepth(31);
+
+  scene.add.text(400, 690, "Puntaje máximo: 200", {
+    fontSize: '40px',
+    align: 'center',
+    fill: '#fff',
+    fontStyle: '900',
+    stroke: '#000',
+    strokeThickness: 6
+  }).setOrigin(0.5).setDepth(31);
+
+  scene.add.text(400, 790, "Siguiente Nivel:\nEL AUTO 🚗", {
+    fontSize: '56px',
+    align: 'center',
+    fill: '#fff',
+    fontStyle: '900',
+    stroke: '#000',
+    strokeThickness: 8
+  }).setOrigin(0.5).setDepth(31);
+}
+
+function update() {
+  if (target) moveShadow(target);
+  if (dog) moveShadow(dog);
+}
+</script>
+
+</body>
+</html>
